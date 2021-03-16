@@ -17,7 +17,7 @@ def slurm_rsync_input(filename, *, destfilename=None):
             subprocess.check_call(["rsync", "-azvP", os.fspath(filename), os.fspath(destfilename)])
         except subprocess.CalledProcessError:
             return filename
-        return tmpdir/filename.name
+        return destfilename
     else:
         return filename
 
