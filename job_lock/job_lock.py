@@ -5,12 +5,16 @@ import subprocess
 
 def SLURM_JOBID(): return os.environ.get("SLURM_JOBID", None)
 
-def slurm_rsync_input(filename):
+def slurm_rsync_input(filename, *, destfilename=None):
     filename = pathlib.Path(filename)
+    if destfilename is None: destfilename = filename.name
+    destfilename = pathlib.Path(destfilename)
+    if destfilename.is_absolute(): raise ValueError(f"destfilename {destfilename} has to be a relative path")
     if SLURM_JOBID() is not None:
         tmpdir = pathlib.Path(os.environ["TMPDIR"])
+        destfilename = tmpdir/destfilename
         try:
-            subprocess.check_call(["rsync", "-azvP", str(filename), str(tmpdir)])
+            subprocess.check_call(["rsync", "-azvP", os.fspath(filename), os.fspath(destfilename)])
         except subprocess.CalledProcessError:
             return filename
         return tmpdir/filename.name
@@ -24,7 +28,7 @@ def slurm_rsync_output(filename):
         tmpdir = pathlib.Path(os.environ["TMPDIR"])
         tmpoutput = tmpdir/filename.name
         yield tmpoutput
-        subprocess.check_call(["rsync", "-azvP", str(tmpoutput), str(filename)])
+        subprocess.check_call(["rsync", "-azvP", os.fspath(tmpoutput), os.fspath(filename)])
     else:
         yield filename
 
