@@ -42,13 +42,14 @@ def slurm_clean_up_temp_dir():
             filename.unlink()
 
 class JobLock(object):
-    def __init__(self, filename, message=None, outputfiles=[]):
+    def __init__(self, filename, message=None, outputfiles=[], inputfiles=[]):
         self.filename = pathlib.Path(filename)
         if message is None: message = SLURM_JOBID
         self.__message = message
         self.fd = self.f = None
         self.bool = False
         self.outputfiles = [pathlib.Path(_) for _ in outputfiles]
+        self.inputfiles = [pathlib.Path(_) for _ in inputfiles]
 
     @property
     def wouldbevalid(self):
@@ -68,10 +69,14 @@ class JobLock(object):
         self.fd = os.open(self.filename, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
 
     def __enter__(self):
+        if all(_.exists() for _ in self.outputfiles) and not self.filename.exists():
+            return None
+        if not all(_.exists() for _ in self.inputfiles):
+            return None
         try:
             self.__open()
         except OSError:
-            if self.__message == SLURM_JOBID:
+            if self.__message is SLURM_JOBID:
                 try:
                     with open(self.filename) as f:
                         oldjobid = int(f.read())
@@ -98,7 +103,7 @@ class JobLock(object):
 
         self.f = os.fdopen(self.fd, 'w')
 
-        if self.__message == SLURM_JOBID:
+        if self.__message is SLURM_JOBID:
             self.__message = self.__message()
         try:
             if self.__message is not None:
