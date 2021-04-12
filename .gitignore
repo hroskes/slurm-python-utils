@@ -1,1 +1,5 @@
+/build/lib
+*.egg-info
 *.pyc
+*.tar.gz
+*.whl
