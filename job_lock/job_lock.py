@@ -1,9 +1,14 @@
-import contextlib
-import os
-import pathlib
-import subprocess
+import contextlib, os, pathlib, subprocess, sys, uuid
+if sys.platform != "cygwin":
+    import psutil
 
-def SLURM_JOBID(): return os.environ.get("SLURM_JOBID", None)
+def SLURM_JOBID():
+    return os.environ.get("SLURM_JOBID", None)
+
+def jobinfo():
+    if SLURM_JOBID() is not None:
+        return "SLURM", 0, SLURM_JOBID()
+    return sys.platform, uuid.getnode(), os.getpid()
 
 def slurm_rsync_input(filename, *, destfilename=None):
     filename = pathlib.Path(filename)
@@ -44,7 +49,7 @@ def slurm_clean_up_temp_dir():
 class JobLock(object):
     def __init__(self, filename, message=None, outputfiles=[], inputfiles=[]):
         self.filename = pathlib.Path(filename)
-        if message is None: message = SLURM_JOBID
+        if message is None: message = jobinfo
         self.__message = message
         self.fd = self.f = None
         self.bool = False
@@ -57,13 +62,16 @@ class JobLock(object):
         with self:
             return bool(self)
 
-    @property
-    def runningjobid(self):
+    def runningjobinfo(self, exceptions=False):
         try:
             with open(self.filename) as f:
-                return int(f.read())
-        except (IOError, ValueError):
-            return None
+                jobtype, cpuid, jobid = f.read().split()
+                cpuid = int(cpuid)
+                jobid = int(jobid)
+                return jobtype, cpuid, jobid
+        except (IOError, OSError, ValueError):
+            if exceptions: raise
+            return None, None, None
 
     def __open(self):
         self.fd = os.open(self.filename, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -75,44 +83,43 @@ class JobLock(object):
             return None
         try:
             self.__open()
-        except OSError:
-            if self.__message is SLURM_JOBID:
+        except (IOError, OSError):
+            if self.__message is jobinfo:
                 try:
-                    with open(self.filename) as f:
-                        oldjobid = int(f.read())
-                except IOError:
+                    oldjobinfo = self.runningjobinfo(exceptions=True)
+                except (IOError, OSError):
                     try:
                         self.__open()
-                    except OSError:
+                    except (IOError, OSError):
                         return None
                 except ValueError:
                     return None
                 else:
-                    if jobexists(oldjobid):
-                        return None
-                    else:
+                    if jobfinished(*oldjobinfo):
                         for outputfile in self.outputfiles:
                             outputfile.unlink(missing_ok=True)
                         self.filename.unlink(missing_ok=True)
                         try:
                             self.__open()
-                        except OSError:
+                        except (IOError, OSError):
                             return None
+                    else:
+                        return None
             else:
                 return None
 
         self.f = os.fdopen(self.fd, 'w')
 
-        if self.__message is SLURM_JOBID:
+        if self.__message is jobinfo:
             self.__message = self.__message()
         try:
             if self.__message is not None:
                 self.f.write(self.__message+"\n")
-        except IOError:
+        except (IOError, OSError):
             pass
         try:
             self.f.close()
-        except IOError:
+        except (IOError, OSError):
             pass
         self.bool = True
         return True
@@ -129,12 +136,34 @@ class JobLock(object):
     def __bool__(self):
         return self.bool
 
-def jobexists(jobid):
+def jobfinished(jobtype, cpuid, jobid):
+    if jobtype == "slurm":
         try:
             output = subprocess.check_output(["squeue", "--job", str(jobid)], stderr=subprocess.STDOUT)
-            return str(jobid).encode("ascii") in output
+            if str(jobid).encode("ascii") in output: return False #job is still running
+            return True #job is finished
+        except FileNotFoundError:  #no squeue
+            return None  #we don't know if the job finished
         except subprocess.CalledProcessError as e:
             if b"slurm_load_jobs error: Invalid job id specified" in e.output:
-                return False
+                return True #job is finished
             print(e.output)
             raise
+    else:
+        myjobtype, mycpuid, myjobid = jobinfo()
+        if myjobtype != jobtype: return None #we don't know if the job finished
+        if mycpuid != cpuid: return None #we don't know if the job finished
+        if jobid == myjobid: return False #job is still running
+        if sys.platform == "cygwin":
+            psoutput = subprocess.check_output(["ps", "-s"])
+            lines = psoutput.split("\n")
+            ncolumns = len(lines[0])
+            for line in lines[1:]:
+                if int(line.split(maxsplit=1)[0]) == jobid:
+                    return False #job is still running
+            return True #job is finished
+        else:
+            for process in psutil.process_iter():
+                if jobid == process.pid:
+                    return False #job is still running
+            return True #job is finished
