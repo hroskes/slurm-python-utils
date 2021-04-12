@@ -77,7 +77,7 @@ class JobLock(object):
         self.fd = os.open(self.filename, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
 
     def __enter__(self):
-        if all(_.exists() for _ in self.outputfiles) and not self.filename.exists():
+        if self.outputfiles and all(_.exists() for _ in self.outputfiles) and not self.filename.exists():
             return None
         if not all(_.exists() for _ in self.inputfiles):
             return None
@@ -111,7 +111,7 @@ class JobLock(object):
         self.f = os.fdopen(self.fd, 'w')
 
         if self.__message is jobinfo:
-            self.__message = self.__message()
+            self.__message = " ".join(str(_) for _ in self.__message())
         try:
             if self.__message is not None:
                 self.f.write(self.__message+"\n")
@@ -156,9 +156,10 @@ def jobfinished(jobtype, cpuid, jobid):
         if jobid == myjobid: return False #job is still running
         if sys.platform == "cygwin":
             psoutput = subprocess.check_output(["ps", "-s"])
-            lines = psoutput.split("\n")
+            lines = psoutput.split(b"\n")
             ncolumns = len(lines[0])
             for line in lines[1:]:
+                if not line: continue
                 if int(line.split(maxsplit=1)[0]) == jobid:
                     return False #job is still running
             return True #job is finished
