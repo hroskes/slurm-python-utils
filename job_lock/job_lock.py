@@ -2,6 +2,15 @@ import contextlib, os, pathlib, subprocess, sys, uuid
 if sys.platform != "cygwin":
     import psutil
 
+def rm_missing_ok(path):
+    if sys.version_info >= (3, 8):
+        return path.unlink(missing_ok=True)
+    else:
+        try:
+            return path.unlink()
+        except FileNotFoundError:
+            pass
+
 def SLURM_JOBID():
     return os.environ.get("SLURM_JOBID", None)
 
@@ -99,8 +108,8 @@ class JobLock(object):
                 else:
                     if jobfinished(*oldjobinfo):
                         for outputfile in self.outputfiles:
-                            outputfile.unlink(missing_ok=True)
-                        self.filename.unlink(missing_ok=True)
+                            rm_missing_ok(outputfile)
+                        rm_missing_ok(self.filename)
                         removed_failed_job = True
                         try:
                             self.__open()
@@ -132,8 +141,8 @@ class JobLock(object):
         if self:
             if exc is not None:
                 for outputfile in self.outputfiles:
-                    outputfile.unlink(missing_ok=True)
-            self.filename.unlink(missing_ok=True)
+                    rm_missing_ok(outputfile)
+            rm_missing_ok(self.filename)
         self.fd = self.f = None
         self.bool = self.removed_failed_job = False
 
