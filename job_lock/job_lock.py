@@ -55,6 +55,7 @@ class JobLock(object):
         self.bool = False
         self.outputfiles = [pathlib.Path(_) for _ in outputfiles]
         self.inputfiles = [pathlib.Path(_) for _ in inputfiles]
+        self.removed_failed_job = False
 
     @property
     def wouldbevalid(self):
@@ -77,6 +78,7 @@ class JobLock(object):
         self.fd = os.open(self.filename, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
 
     def __enter__(self):
+        removed_failed_job = False
         if self.outputfiles and all(_.exists() for _ in self.outputfiles) and not self.filename.exists():
             return None
         if not all(_.exists() for _ in self.inputfiles):
@@ -99,6 +101,7 @@ class JobLock(object):
                         for outputfile in self.outputfiles:
                             outputfile.unlink(missing_ok=True)
                         self.filename.unlink(missing_ok=True)
+                        removed_failed_job = True
                         try:
                             self.__open()
                         except (IOError, OSError):
@@ -122,6 +125,7 @@ class JobLock(object):
         except (IOError, OSError):
             pass
         self.bool = True
+        self.removed_failed_job = removed_failed_job
         return True
 
     def __exit__(self, exc_type, exc, traceback):
@@ -131,7 +135,7 @@ class JobLock(object):
                     outputfile.unlink(missing_ok=True)
             self.filename.unlink(missing_ok=True)
         self.fd = self.f = None
-        self.bool = False
+        self.bool = self.removed_failed_job = False
 
     def __bool__(self):
         return self.bool
