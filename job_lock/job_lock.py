@@ -94,14 +94,14 @@ class JobLock(object):
       return None
     try:
       self.__open()
-    except (IOError, OSError):
+    except FileExistsError:
       if self.__message is jobinfo:
         try:
           oldjobinfo = self.runningjobinfo(exceptions=True)
         except (IOError, OSError):
           try:
             self.__open()
-          except (IOError, OSError):
+          except FileExistsError:
             return None
         except ValueError:
           return None
@@ -113,7 +113,7 @@ class JobLock(object):
             removed_failed_job = True
             try:
               self.__open()
-            except (IOError, OSError):
+            except FileExistsError:
               return None
           else:
             return None
