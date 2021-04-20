@@ -157,7 +157,7 @@ class JobLock(object):
     return self.bool
 
 def jobfinished(jobtype, cpuid, jobid):
-  if jobtype == "slurm":
+  if jobtype == "SLURM":
     try:
       output = subprocess.check_output(["squeue", "--job", str(jobid)], stderr=subprocess.STDOUT)
       if str(jobid).encode("ascii") in output: return False #job is still running
