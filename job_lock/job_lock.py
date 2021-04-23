@@ -72,10 +72,18 @@ class JobLock(object):
     with self:
       return bool(self)
 
-  def runningjobinfo(self, exceptions=False):
+  def runningjobinfo(self, exceptions=False, compatibility=True):
     try:
       with open(self.filename) as f:
-        jobtype, cpuid, jobid = f.read().split()
+        contents = f.read()
+        try:
+          jobtype, cpuid, jobid = contents.split()
+        except ValueError:
+          if not compatibility: raise
+          #compatibility with older version of job_lock
+          jobtype = "SLURM"
+          cpuid = 0
+          jobid = int(contents)
         cpuid = int(cpuid)
         jobid = int(jobid)
         return jobtype, cpuid, jobid
