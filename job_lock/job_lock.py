@@ -19,7 +19,7 @@ def jobinfo():
     return "SLURM", 0, SLURM_JOBID()
   return sys.platform, uuid.getnode(), os.getpid()
 
-def slurm_rsync_input(filename, *, destfilename=None):
+def slurm_rsync_input(filename, *, destfilename=None, copylinks=True):
   filename = pathlib.Path(filename)
   if destfilename is None: destfilename = filename.name
   destfilename = pathlib.Path(destfilename)
@@ -28,7 +28,7 @@ def slurm_rsync_input(filename, *, destfilename=None):
     tmpdir = pathlib.Path(os.environ["TMPDIR"])
     destfilename = tmpdir/destfilename
     try:
-      subprocess.check_call(["rsync", "-azvP", os.fspath(filename), os.fspath(destfilename)])
+      subprocess.check_call(["rsync", "-azvP"+("L" if copylinks else ""), os.fspath(filename), os.fspath(destfilename)])
     except subprocess.CalledProcessError:
       return filename
     return destfilename
@@ -36,13 +36,13 @@ def slurm_rsync_input(filename, *, destfilename=None):
     return filename
 
 @contextlib.contextmanager
-def slurm_rsync_output(filename):
+def slurm_rsync_output(filename, *, copylinks=True):
   filename = pathlib.Path(filename)
   if SLURM_JOBID() is not None:
     tmpdir = pathlib.Path(os.environ["TMPDIR"])
     tmpoutput = tmpdir/filename.name
     yield tmpoutput
-    subprocess.check_call(["rsync", "-azvP", os.fspath(tmpoutput), os.fspath(filename)])
+    subprocess.check_call(["rsync", "-azvP"+("L" if copylinks else ""), os.fspath(tmpoutput), os.fspath(filename)])
   else:
     yield filename
 
