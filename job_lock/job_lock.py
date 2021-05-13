@@ -1,4 +1,4 @@
-import contextlib, os, pathlib, subprocess, sys, uuid
+import contextlib, itertools, os, pathlib, subprocess, sys, time, uuid
 if sys.platform != "cygwin":
   import psutil
 
@@ -150,7 +150,7 @@ class JobLock(object):
       pass
     self.bool = True
     self.removed_failed_job = removed_failed_job
-    return True
+    return self
 
   def __exit__(self, exc_type, exc, traceback):
     if self:
@@ -196,3 +196,24 @@ def jobfinished(jobtype, cpuid, jobid):
         if jobid == process.pid:
           return False #job is still running
       return True #job is finished
+
+class JobLockAndWait(JobLock):
+  def __init__(self, name, delay, *, printmessage=None, task="doing this", maxiterations=1000, **kwargs):
+    super().__init__(name, **kwargs)
+    self.delay = delay
+    if printmessage is None:
+      printmessage = "Another process is already {task}.  Waiting {delay} seconds."
+    printmessage = printmessage.format(delay=delay, task=task)
+    self.__printmessage = printmessage
+    self.niterations = 0
+    self.maxiterations = maxiterations
+
+  def __enter__(self):
+    for self.niterations in itertools.count(1):
+      if self.niterations > self.maxiterations:
+        raise RuntimeError(f"JobLockAndWait still did not succeed after {self.maxiterations} iterations")
+      result = super().__enter__()
+      if result:
+        return result
+      print(self.__printmessage)
+      time.sleep(self.delay)
