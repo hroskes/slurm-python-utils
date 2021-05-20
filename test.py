@@ -20,6 +20,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
   def testJobLock(self):
     with JobLock(self.tmpdir/"lock1.lock") as lock1:
       self.assertTrue(lock1)
+      self.assertEqual(lock1.iterative_lock_filename, self.tmpdir/"lock1.lock_2")
       with JobLock(self.tmpdir/"lock2.lock") as lock2:
         self.assertTrue(lock2)
       with JobLock(self.tmpdir/"lock1.lock") as lock3:

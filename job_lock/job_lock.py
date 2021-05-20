@@ -1,4 +1,4 @@
-import contextlib, itertools, os, pathlib, subprocess, sys, time, uuid
+import contextlib, itertools, os, pathlib, re, subprocess, sys, time, uuid
 if sys.platform != "cygwin":
   import psutil
 
@@ -94,6 +94,17 @@ class JobLock(object):
   def __open(self):
     self.fd = os.open(self.filename, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
 
+  @property
+  def iterative_lock_filename(self):
+    match = re.match("[.]lock(?:_([0-9]+))?$", self.filename.suffix)
+    if match:
+      n = match.group(1)
+      if n is None: n = 1
+      n = int(n)
+      return self.filename.with_suffix(f".lock_{n+1}")
+    else:
+      return self.filename.with_suffix(self.filename.suffix+".lock")
+
   def __enter__(self):
     removed_failed_job = False
     if self.outputfiles and all(_.exists() for _ in self.outputfiles) and not self.filename.exists():
@@ -109,7 +120,7 @@ class JobLock(object):
         #a race condition: two jobs could be looking if the previous
         #job failed at the same time, and one of them could remove
         #the lock created by the other one
-        with JobLock(self.filename.with_suffix(self.filename.suffix+".lock")) as iterative_lock:
+        with JobLock(self.iterative_lock_filename) as iterative_lock:
           if not iterative_lock: return None
           try:
             oldjobinfo = self.runningjobinfo(exceptions=True)
