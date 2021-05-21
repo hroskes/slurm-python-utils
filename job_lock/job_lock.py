@@ -56,7 +56,7 @@ def slurm_clean_up_temp_dir():
       filename.unlink()
 
 class JobLock(object):
-  def __init__(self, filename, message=None, outputfiles=[], inputfiles=[]):
+  def __init__(self, filename, message=None, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True):
     self.filename = pathlib.Path(filename)
     if message is None: message = jobinfo
     self.__message = message
@@ -64,6 +64,8 @@ class JobLock(object):
     self.bool = False
     self.outputfiles = [pathlib.Path(_) for _ in outputfiles]
     self.inputfiles = [pathlib.Path(_) for _ in inputfiles]
+    self.checkoutputfiles = outputfiles and checkoutputfiles
+    self.checkinputfiles = inputfiles and checkinputfiles
     self.removed_failed_job = False
 
   @property
@@ -107,9 +109,9 @@ class JobLock(object):
 
   def __enter__(self):
     removed_failed_job = False
-    if self.outputfiles and all(_.exists() for _ in self.outputfiles) and not self.filename.exists():
+    if self.checkoutputfiles and all(_.exists() for _ in self.outputfiles) and not self.filename.exists():
       return None
-    if not all(_.exists() for _ in self.inputfiles):
+    if self.checkinputfiles and not all(_.exists() for _ in self.inputfiles):
       return None
     try:
       self.__open()
