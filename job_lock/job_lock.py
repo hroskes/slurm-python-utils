@@ -56,10 +56,8 @@ def slurm_clean_up_temp_dir():
       filename.unlink()
 
 class JobLock(object):
-  def __init__(self, filename, message=None, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True):
+  def __init__(self, filename, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True):
     self.filename = pathlib.Path(filename)
-    if message is None: message = jobinfo
-    self.__message = message
     self.fd = self.f = None
     self.bool = False
     self.outputfiles = [pathlib.Path(_) for _ in outputfiles]
@@ -116,45 +114,40 @@ class JobLock(object):
     try:
       self.__open()
     except FileExistsError:
-      if self.__message is jobinfo:
-        #check if the job died without removing the lock
-        #however this needs another job lock, because it has
-        #a race condition: two jobs could be looking if the previous
-        #job failed at the same time, and one of them could remove
-        #the lock created by the other one
-        with JobLock(self.iterative_lock_filename) as iterative_lock:
-          if not iterative_lock: return None
+      #check if the job died without removing the lock
+      #however this needs another job lock, because it has
+      #a race condition: two jobs could be looking if the previous
+      #job failed at the same time, and one of them could remove
+      #the lock created by the other one
+      with JobLock(self.iterative_lock_filename) as iterative_lock:
+        if not iterative_lock: return None
+        try:
+          oldjobinfo = self.runningjobinfo(exceptions=True)
+        except (IOError, OSError):
           try:
-            oldjobinfo = self.runningjobinfo(exceptions=True)
-          except (IOError, OSError):
+            self.__open()
+          except FileExistsError:
+            return None
+        except ValueError:
+          return None
+        else:
+          if jobfinished(*oldjobinfo):
+            for outputfile in self.outputfiles:
+              rm_missing_ok(outputfile)
+            rm_missing_ok(self.filename)
+            removed_failed_job = True
             try:
               self.__open()
             except FileExistsError:
               return None
-          except ValueError:
-            return None
           else:
-            if jobfinished(*oldjobinfo):
-              for outputfile in self.outputfiles:
-                rm_missing_ok(outputfile)
-              rm_missing_ok(self.filename)
-              removed_failed_job = True
-              try:
-                self.__open()
-              except FileExistsError:
-                return None
-            else:
-              return None
-      else:
-        return None
+            return None
 
     self.f = os.fdopen(self.fd, 'w')
 
-    if self.__message is jobinfo:
-      self.__message = " ".join(str(_) for _ in self.__message())
+    message = " ".join(str(_) for _ in jobinfo())
     try:
-      if self.__message is not None:
-        self.f.write(self.__message+"\n")
+      self.f.write(message+"\n")
     except (IOError, OSError):
       pass
     try:
