@@ -1,4 +1,4 @@
-import contextlib, os, pathlib, subprocess, tempfile, unittest
+import contextlib, datetime, os, pathlib, subprocess, tempfile, time, unittest
 from job_lock import JobLock, JobLockAndWait, jobinfo
 
 class TestJobLock(unittest.TestCase, contextlib.ExitStack):
@@ -109,3 +109,15 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with JobLockAndWait(self.tmpdir/"lock2.lock", 0.001, maxiterations=10) as lock2:
       self.assertEqual(lock2.niterations, 2)
 
+  def testCorruptFileTimeout(self):
+    with open(self.tmpdir/"lock1.lock", "w") as f:
+      pass
+    with JobLock(self.tmpdir/"lock1.lock", corruptfiletimeout=datetime.timedelta(seconds=.1)) as lock:
+      self.assertFalse(lock)
+    time.sleep(.1)
+    with JobLock(self.tmpdir/"lock1.lock") as lock:
+      self.assertFalse(lock)
+    with JobLock(self.tmpdir/"lock1.lock", corruptfiletimeout=datetime.timedelta(seconds=10)) as lock:
+      self.assertFalse(lock)
+    with JobLock(self.tmpdir/"lock1.lock", corruptfiletimeout=datetime.timedelta(seconds=.1)) as lock:
+      self.assertTrue(lock)

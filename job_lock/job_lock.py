@@ -1,4 +1,4 @@
-import contextlib, itertools, os, pathlib, re, subprocess, sys, time, uuid
+import contextlib, datetime, itertools, os, pathlib, re, subprocess, sys, time, uuid
 if sys.platform != "cygwin":
   import psutil
 
@@ -56,7 +56,7 @@ def slurm_clean_up_temp_dir():
       filename.unlink()
 
 class JobLock(object):
-  def __init__(self, filename, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True):
+  def __init__(self, filename, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, corruptfiletimeout=None):
     self.filename = pathlib.Path(filename)
     self.fd = self.f = None
     self.bool = False
@@ -65,6 +65,7 @@ class JobLock(object):
     self.checkoutputfiles = outputfiles and checkoutputfiles
     self.checkinputfiles = inputfiles and checkinputfiles
     self.removed_failed_job = False
+    self.corruptfiletimeout = corruptfiletimeout
 
   @property
   def wouldbevalid(self):
@@ -129,7 +130,22 @@ class JobLock(object):
           except FileExistsError:
             return None
         except ValueError:
-          return None
+          if self.corruptfiletimeout is not None:
+            modified = datetime.datetime.fromtimestamp(self.filename.stat().st_mtime)
+            now = datetime.datetime.now()
+            if now - modified >= self.corruptfiletimeout:
+              for outputfile in self.outputfiles:
+                rm_missing_ok(outputfile)
+              rm_missing_ok(self.filename)
+              removed_failed_job = True
+              try:
+                self.__open()
+              except FileExistsError:
+                return None
+            else:
+              return None
+          else:
+            return None
         else:
           if jobfinished(*oldjobinfo):
             for outputfile in self.outputfiles:
