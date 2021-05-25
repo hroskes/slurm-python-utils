@@ -110,10 +110,14 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       self.assertEqual(lock2.niterations, 2)
 
   def testCorruptFileTimeout(self):
+    with open(self.tmpdir/"lock1.lock_2", "w") as f:
+      pass
+    time.sleep(.1)
     with open(self.tmpdir/"lock1.lock", "w") as f:
       pass
     with JobLock(self.tmpdir/"lock1.lock", corruptfiletimeout=datetime.timedelta(seconds=.1)) as lock:
       self.assertFalse(lock)
+    self.assertFalse((self.tmpdir/"lock1.lock_2").exists())
     time.sleep(.1)
     with JobLock(self.tmpdir/"lock1.lock") as lock:
       self.assertFalse(lock)

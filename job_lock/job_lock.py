@@ -56,6 +56,8 @@ def slurm_clean_up_temp_dir():
       filename.unlink()
 
 class JobLock(object):
+  defaultcorruptfiletimeout = None
+
   def __init__(self, filename, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, corruptfiletimeout=None):
     self.filename = pathlib.Path(filename)
     self.fd = self.f = None
@@ -65,6 +67,8 @@ class JobLock(object):
     self.checkoutputfiles = outputfiles and checkoutputfiles
     self.checkinputfiles = inputfiles and checkinputfiles
     self.removed_failed_job = False
+    if corruptfiletimeout is None:
+      corruptfiletimeout = self.defaultcorruptfiletimeout
     self.corruptfiletimeout = corruptfiletimeout
 
   @property
@@ -120,7 +124,7 @@ class JobLock(object):
       #a race condition: two jobs could be looking if the previous
       #job failed at the same time, and one of them could remove
       #the lock created by the other one
-      with JobLock(self.iterative_lock_filename) as iterative_lock:
+      with JobLock(self.iterative_lock_filename, corruptfiletimeout=self.corruptfiletimeout) as iterative_lock:
         if not iterative_lock: return None
         try:
           oldjobinfo = self.runningjobinfo(exceptions=True)
