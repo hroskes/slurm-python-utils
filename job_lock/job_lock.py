@@ -110,6 +110,29 @@ class JobLock(object):
     else:
       return self.filename.with_suffix(self.filename.suffix+".lock")
 
+  def clean_up_iterative_locks(self):
+    iterative_lock_filename = self.iterative_lock_filename
+    match = re.match("[.]lock(?:_([0-9]+))?$", iterative_lock_filename.suffix)
+    assert match
+    my_n = match.group(1)
+    if my_n is None: my_n = 1
+    my_n = int(my_n)-1
+
+    best = float("inf"), None
+    for filename in iterative_lock_filename.parent.glob(iterative_lock_filename.with_suffix(".lock").name+"*"):
+      match = re.match("[.]lock(?:_([0-9]+))?$", filename.suffix)
+      if not match: continue
+      n = match.group(1)
+      if n is None: n = 1
+      n = int(n)
+      if my_n < n < best[0]:
+        best = n, filename
+
+    if best[1] is None: return
+    with JobLock(best[1], corruptfiletimeout=self.corruptfiletimeout) as lock:
+      if lock:
+        lock.clean_up_iterative_locks()
+
   def __enter__(self):
     removed_failed_job = False
     if self.checkoutputfiles and all(_.exists() for _ in self.outputfiles) and not self.filename.exists():
@@ -180,9 +203,13 @@ class JobLock(object):
 
   def __exit__(self, exc_type, exc, traceback):
     if self:
+      #clean up output files if job failed
       if exc is not None:
         for outputfile in self.outputfiles:
           rm_missing_ok(outputfile)
+      #clean up iterative locks whose jobs died
+      self.clean_up_iterative_locks()
+      #remove this lock file
       rm_missing_ok(self.filename)
     self.fd = self.f = None
     self.bool = self.removed_failed_job = False
