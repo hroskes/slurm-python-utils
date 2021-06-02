@@ -56,8 +56,8 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     dummysqueue = """
       #!/bin/bash
       echo '
-             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
-           1234567 partition    myjob       me  R   12:34:56      1 mynode
+           1234567   RUNNING
+           1234568   PENDING
       '
     """.lstrip()
     with open(self.tmpdir/"squeue", "w") as f:
@@ -73,6 +73,10 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       f.write("SLURM 0 12345678")
     with open(self.tmpdir/"lock4.lock", "w") as f:
       f.write("12345678")
+    with open(self.tmpdir/"lock5.lock", "w") as f:
+      f.write("SLURM 0 1234568")
+    with open(self.tmpdir/"lock6.lock", "w") as f:
+      f.write("1234568")
 
     with JobLock(self.tmpdir/"lock1.lock") as lock1:
       self.assertFalse(lock1)
@@ -82,6 +86,10 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       self.assertTrue(lock3)
     with JobLock(self.tmpdir/"lock4.lock") as lock4:
       self.assertTrue(lock4)
+    with JobLock(self.tmpdir/"lock5.lock") as lock5:
+      self.assertTrue(lock5)
+    with JobLock(self.tmpdir/"lock6.lock") as lock6:
+      self.assertTrue(lock6)
 
   def testJobLockAndWait(self):
     with JobLockAndWait(self.tmpdir/"lock1.lock", 0.001) as lock1:
@@ -96,8 +104,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     dummysqueue = """
       #!/bin/bash
       echo '
-             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
-           1234567 partition    myjob       me  R   12:34:56      1 mynode
+           1234567   RUNNING
       '
       sed -i s/1234567/1234568/g $0
     """.lstrip()

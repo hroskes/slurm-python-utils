@@ -193,8 +193,19 @@ class JobLock(object):
 def jobfinished(jobtype, cpuid, jobid):
   if jobtype == "SLURM":
     try:
-      output = subprocess.check_output(["squeue", "--job", str(jobid)], stderr=subprocess.STDOUT)
-      if str(jobid).encode("ascii") in output: return False #job is still running
+      output = subprocess.check_output(["squeue", "--job", str(jobid), "--format", "jobid,state", "--noheader"], stderr=subprocess.STDOUT)
+      for line in output.split(b"\n"):
+        line = line.strip()
+        if not line: continue
+        runningjobid, state = line.split()
+        runningjobid = int(runningjobid)
+        if runningjobid == jobid:
+          state = state.decode("ascii")
+          if state in ("PENDING", "PD"):
+            #this can happen if the job was cancelled due to node failure and was automatically resubmitted
+            return True #job is not currently running
+          else:
+            return False #job is still running
       return True #job is finished
     except FileNotFoundError:  #no squeue
       return None  #we don't know if the job finished
