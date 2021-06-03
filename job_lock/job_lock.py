@@ -225,7 +225,10 @@ def jobfinished(jobtype, cpuid, jobid):
       for line in output.split(b"\n"):
         line = line.strip()
         if not line: continue
-        runningjobid, state = line.split()
+        try:
+          runningjobid, state = line.split()
+        except ValueError:
+          return None #don't know if the job finished, probably a temporary glitch in squeue
         runningjobid = int(runningjobid)
         if runningjobid == jobid:
           state = state.decode("ascii")
