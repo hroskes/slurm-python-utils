@@ -118,20 +118,21 @@ class JobLock(object):
     if my_n is None: my_n = 1
     my_n = int(my_n)-1
 
-    best = float("inf"), None
-    for filename in iterative_lock_filename.parent.glob(iterative_lock_filename.with_suffix(".lock").name+"*"):
+    def n_from_filename(filename):
       match = re.match("[.]lock(?:_([0-9]+))?$", filename.suffix)
-      if not match: continue
+      if not match: return -float("inf")
       n = match.group(1)
       if n is None: n = 1
-      n = int(n)
-      if my_n < n < best[0]:
-        best = n, filename
+      return int(n)
 
-    if best[1] is None: return
-    with JobLock(best[1], corruptfiletimeout=self.corruptfiletimeout) as lock:
-      if lock:
-        lock.clean_up_iterative_locks()
+    filenames = iterative_lock_filename.parent.glob(iterative_lock_filename.with_suffix(".lock").name+"*")
+    filenames = [_ for _ in filenames if n_from_filename(_) > my_n]
+    filenames.sort(key=n_from_filename, reverse=True)
+
+    for filename in filenames:
+      with JobLock(filename, corruptfiletimeout=self.corruptfiletimeout) as lock:
+        if not lock:
+          break
 
   def __enter__(self):
     removed_failed_job = False
