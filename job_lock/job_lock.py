@@ -112,11 +112,6 @@ class JobLock(object):
 
   def clean_up_iterative_locks(self):
     iterative_lock_filename = self.iterative_lock_filename
-    match = re.match("[.]lock(?:_([0-9]+))?$", iterative_lock_filename.suffix)
-    assert match
-    my_n = match.group(1)
-    if my_n is None: my_n = 1
-    my_n = int(my_n)-1
 
     def n_from_filename(filename):
       match = re.match("[.]lock(?:_([0-9]+))?$", filename.suffix)
@@ -124,6 +119,9 @@ class JobLock(object):
       n = match.group(1)
       if n is None: n = 1
       return int(n)
+
+    my_n = n_from_filename(iterative_lock_filename)-1
+    if my_n > 1: return #they'll be cleaned up when the non-iterative version cleans them up
 
     filenames = iterative_lock_filename.parent.glob(iterative_lock_filename.with_suffix(".lock").name+"*")
     filenames = [_ for _ in filenames if n_from_filename(_) > my_n]
