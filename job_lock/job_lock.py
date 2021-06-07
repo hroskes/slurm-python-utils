@@ -1,4 +1,4 @@
-import contextlib, datetime, itertools, os, pathlib, re, subprocess, sys, time, uuid
+import contextlib, datetime, itertools, os, pathlib, random, re, subprocess, sys, time, uuid
 if sys.platform != "cygwin":
   import psutil
 
@@ -106,6 +106,9 @@ class JobLock(object):
       n = match.group(1)
       if n is None: n = 1
       n = int(n)
+      if n > 1:
+        #sleep by a random amount less than 1/100 of a second to lower the probability of two jobs competing indefinitely
+        time.sleep(random.random()/100)
       return self.filename.with_suffix(f".lock_{n+1}")
     else:
       return self.filename.with_suffix(self.filename.suffix+".lock")
