@@ -288,6 +288,7 @@ class JobLockAndWait(JobLock):
       time.sleep(self.delay)
 
 def clean_up_old_job_locks(folder, glob="*.lock_*", howold=datetime.timedelta(days=7), dryrun=False):
+  folder = pathlib.Path(folder)
   all_locks = sorted(folder.rglob(glob))
   all_first_order_locks = sorted({filename.with_suffix(filename.suffix.split("_")[0]) for filename in all_locks})
   locks_dict = {first_order_lock: {lock for lock in all_locks if lock.with_suffix(lock.suffix.split("_")[0]) == first_order_lock} for first_order_lock in all_first_order_locks}
