@@ -17,4 +17,5 @@ setuptools.setup(
   install_requires = install_requires,
   long_description = long_description,
   long_description_content_type = 'text/markdown',
+  has_ext_modules=lambda: True,
 )
