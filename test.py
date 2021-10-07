@@ -138,12 +138,12 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       self.assertEqual(lock2.niterations, 2)
 
   def testCorruptFileTimeout(self):
-    with open(self.tmpdir/"lock1.lock_2", "w") as f: pass
-    with open(self.tmpdir/"lock1.lock_5", "w") as f: pass
-    with open(self.tmpdir/"lock1.lock_30", "w") as f: pass
+    with open(self.tmpdir/"lock1.lock_2", "w"): pass
+    with open(self.tmpdir/"lock1.lock_5", "w"): pass
+    with open(self.tmpdir/"lock1.lock_30", "w"): pass
     time.sleep(1)
-    with open(self.tmpdir/"lock1.lock_10", "w") as f: pass
-    with open(self.tmpdir/"lock1.lock", "w") as f: pass
+    with open(self.tmpdir/"lock1.lock_10", "w"): pass
+    with open(self.tmpdir/"lock1.lock", "w"): pass
     with JobLock(self.tmpdir/"lock1.lock", corruptfiletimeout=datetime.timedelta(seconds=1)) as lock:
       self.assertFalse(lock)
     self.assertFalse((self.tmpdir/"lock1.lock_2").exists())
@@ -162,11 +162,11 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     self.assertFalse((self.tmpdir/"lock1.lock_30").exists())
 
   def testCleanUp(self):
-    with open(self.tmpdir/"lock1.lock_2", "w") as f: pass
-    with open(self.tmpdir/"lock1.lock_5", "w") as f: pass
-    with open(self.tmpdir/"lock1.lock_30", "w") as f: pass
+    with open(self.tmpdir/"lock1.lock_2", "w"): pass
+    with open(self.tmpdir/"lock1.lock_5", "w"): pass
+    with open(self.tmpdir/"lock1.lock_30", "w"): pass
     time.sleep(1)
-    with open(self.tmpdir/"lock1.lock_10", "w") as f: pass
+    with open(self.tmpdir/"lock1.lock_10", "w"): pass
     clean_up_old_job_locks(self.tmpdir, howold=datetime.timedelta(seconds=1), dryrun=True)
     self.assertTrue((self.tmpdir/"lock1.lock_2").exists())
     self.assertTrue((self.tmpdir/"lock1.lock_5").exists())

@@ -1,4 +1,4 @@
-import pathlib, setuptools, sys
+import pathlib, setuptools
 
 here = pathlib.Path(__file__).parent
 with open(here/'README.md', encoding='utf-8') as f:

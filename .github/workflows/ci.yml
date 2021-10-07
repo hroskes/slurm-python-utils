@@ -28,6 +28,9 @@ jobs:
     - name: Unit tests
       run: |
         python -m unittest test.py
+    - name: pyflakes
+      run: |
+        python -m pyflakes .
 
   deploy:
 

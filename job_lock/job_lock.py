@@ -1,4 +1,4 @@
-import contextlib, datetime, itertools, os, pathlib, random, re, subprocess, sys, time, uuid
+import contextlib, datetime, itertools, os, pathlib, random, re, shutil, subprocess, sys, time, uuid
 if sys.platform != "cygwin":
   import psutil
 
@@ -254,7 +254,6 @@ def jobfinished(jobtype, cpuid, jobid):
     if sys.platform == "cygwin":
       psoutput = subprocess.check_output(["ps", "-s"])
       lines = psoutput.split(b"\n")
-      ncolumns = len(lines[0])
       for line in lines[1:]:
         if not line: continue
         if int(line.split(maxsplit=1)[0]) == jobid:
