@@ -321,3 +321,22 @@ def clean_up_old_job_locks(folder, glob="*.lock_*", howold=datetime.timedelta(da
       with JobLock(_, corruptfiletimeout=howold): pass
   print(f"{dontverb} the following locks (and their iterations):")
   for _ in dontremove: print(_)
+
+class MultiJobLock(contextlib.ExitStack):
+  """
+  JobLock with multiple files.
+  If any of them fail, all the ones that previously succeeded are closed
+  and the whole thing is considered to fail.
+  """
+  def __init__(self, *filenames, **kwargs):
+    super().__init__()
+    self.__filenames = filenames
+    self.__kwargs = kwargs
+
+  def __enter__(self):
+    super().__enter__()
+    for filename in self.__filenames:
+      if not self.enter_context(JobLock(filename, self.__kwargs)):
+        self.close()
+        return False
+    return True

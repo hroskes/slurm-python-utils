@@ -1,5 +1,5 @@
 import contextlib, datetime, os, pathlib, subprocess, tempfile, time, unittest
-from job_lock import clean_up_old_job_locks, JobLock, JobLockAndWait, jobinfo
+from job_lock import clean_up_old_job_locks, JobLock, JobLockAndWait, jobinfo, MultiJobLock
 
 class TestJobLock(unittest.TestCase, contextlib.ExitStack):
   def __init__(self, *args, **kwargs):
@@ -25,6 +25,27 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
         self.assertTrue(lock2)
       with JobLock(self.tmpdir/"lock1.lock") as lock3:
         self.assertFalse(lock3)
+
+  def testMultiJobLock(self):
+    fn1 = self.tmpdir/"lock1.lock"
+    fn2 = self.tmpdir/"lock2.lock"
+
+    with MultiJobLock(fn1, fn2) as locks:
+      self.assertTrue(locks)
+      self.assertTrue(fn1.exists())
+      self.assertTrue(fn2.exists())
+
+    with JobLock(fn1):
+      with MultiJobLock(fn1, fn2) as locks:
+        self.assertFalse(locks)
+        self.assertTrue(fn1.exists())
+        self.assertFalse(fn2.exists())
+
+    with JobLock(fn2):
+      with MultiJobLock(fn1, fn2) as locks:
+        self.assertFalse(locks)
+        self.assertFalse(fn1.exists())
+        self.assertTrue(fn2.exists())
 
   def testRunningJobs(self):
     jobtype, cpuid, jobid = jobinfo()
