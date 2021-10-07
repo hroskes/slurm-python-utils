@@ -24,7 +24,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: pip install
       run: |
-        pip install .
+        pip install . pyflakes
     - name: Unit tests
       run: |
         python -m unittest test.py
