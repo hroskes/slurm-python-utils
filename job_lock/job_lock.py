@@ -58,7 +58,7 @@ def slurm_clean_up_temp_dir():
 class JobLock(object):
   defaultcorruptfiletimeout = None
 
-  def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, corruptfiletimeout=None):
+  def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, corruptfiletimeout=None, mkdir=False):
     self.filename = pathlib.Path(filename)
     self.fd = self.f = None
     self.bool = False
@@ -70,6 +70,7 @@ class JobLock(object):
     if corruptfiletimeout is None:
       corruptfiletimeout = self.defaultcorruptfiletimeout
     self.corruptfiletimeout = corruptfiletimeout
+    self.mkdir = mkdir
 
   @property
   def wouldbevalid(self):
@@ -141,6 +142,8 @@ class JobLock(object):
       return None
     if self.checkinputfiles and not all(_.exists() for _ in self.inputfiles):
       return None
+    if self.mkdir:
+      self.filename.parent.mkdir(parents=True, exist_ok=True)
     try:
       self.__open()
     except FileExistsError:

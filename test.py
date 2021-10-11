@@ -183,3 +183,12 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     self.assertFalse((self.tmpdir/"lock1.lock_5").exists())
     self.assertFalse((self.tmpdir/"lock1.lock_10").exists())
     self.assertFalse((self.tmpdir/"lock1.lock_30").exists())
+
+  def testMkdir(self):
+    with self.assertRaises(FileNotFoundError):
+      with JobLock(self.tmpdir/"nested"/"subfolders"/"lock1.lock") as lock:
+        pass
+    with JobLock(self.tmpdir/"nested"/"subfolders"/"lock1.lock", mkdir=True) as lock:
+      self.assertTrue(lock)
+    with JobLock(self.tmpdir/"nested"/"subfolders"/"lock1.lock") as lock:
+      self.assertTrue(lock)
