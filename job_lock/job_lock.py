@@ -58,7 +58,7 @@ def slurm_clean_up_temp_dir():
 class JobLock(object):
   defaultcorruptfiletimeout = None
 
-  def __init__(self, filename, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, corruptfiletimeout=None):
+  def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, corruptfiletimeout=None):
     self.filename = pathlib.Path(filename)
     self.fd = self.f = None
     self.bool = False
@@ -335,7 +335,7 @@ class MultiJobLock(contextlib.ExitStack):
   def __enter__(self):
     super().__enter__()
     for filename in self.__filenames:
-      if not self.enter_context(JobLock(filename, self.__kwargs)):
+      if not self.enter_context(JobLock(filename, **self.__kwargs)):
         self.close()
         return False
     return True
