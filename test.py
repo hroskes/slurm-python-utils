@@ -1,5 +1,5 @@
 import contextlib, datetime, os, pathlib, subprocess, tempfile, time, unittest
-from job_lock import clean_up_old_job_locks, JobLock, JobLockAndWait, jobinfo, MultiJobLock
+from job_lock import clean_up_old_job_locks, JobLock, JobLockAndWait, jobinfo, MultiJobLock, slurm_clean_up_temp_dir, slurm_rsync_input, slurm_rsync_output
 
 class TestJobLock(unittest.TestCase, contextlib.ExitStack):
   def __init__(self, *args, **kwargs):
@@ -11,6 +11,9 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
   def setUp(self):
     self.tmpdir = pathlib.Path(self.enter_context(tempfile.TemporaryDirectory()))
     self.bkpenviron = os.environ.copy()
+    self.slurm_tmpdir = self.tmpdir/"slurm_tmpdir"
+    self.slurm_tmpdir.mkdir()
+    os.environ["TMPDIR"] = os.fspath(self.slurm_tmpdir)
   def tearDown(self):
     del self.tmpdir
     self.close()
@@ -192,3 +195,38 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       self.assertTrue(lock)
     with JobLock(self.tmpdir/"nested"/"subfolders"/"lock1.lock") as lock:
       self.assertTrue(lock)
+
+  def testSlurmRsyncInput(self):
+    inputfile = self.tmpdir/"input.txt"
+    with open(inputfile, "w") as f: f.write("hello")
+
+    rsyncedinput = slurm_rsync_input(inputfile)
+    self.assertEqual(inputfile, rsyncedinput)
+
+    os.environ["SLURM_JOBID"] = "1234567"
+    rsyncedinput = slurm_rsync_input(inputfile)
+    self.assertNotEqual(inputfile, rsyncedinput)
+    with open(inputfile) as f1, open(rsyncedinput) as f2:
+      self.assertEqual(f1.read(), f2.read())
+
+  def testSlurmRsyncOutput(self):
+    outputfile = self.tmpdir/"output.txt"
+    with slurm_rsync_output(outputfile) as outputtorsync:
+      self.assertEqual(outputfile, outputtorsync)
+
+    os.environ["SLURM_JOBID"] = "1234567"
+    with slurm_rsync_output(outputfile) as outputtorsync:
+      self.assertNotEqual(outputfile, outputtorsync)
+      with open(outputtorsync, "w") as f: f.write("hello")
+    with open(outputfile) as f1, open(outputtorsync) as f2:
+      self.assertEqual(f1.read(), f2.read())
+
+  def testSlurmCleanUpTempDir(self):
+    filename = self.slurm_tmpdir/"test.txt"
+    filename.touch()
+    slurm_clean_up_temp_dir()
+    self.assertTrue(filename.exists())
+
+    os.environ["SLURM_JOBID"] = "1234567"
+    slurm_clean_up_temp_dir()
+    self.assertFalse(filename.exists())
