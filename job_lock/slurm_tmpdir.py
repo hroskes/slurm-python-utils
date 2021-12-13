@@ -14,7 +14,7 @@ def slurm_rsync_input(filename, *, destfilename=None, copylinks=True):
       lockfilename = destfilename.with_suffix(".lock_2")
     assert lockfilename != destfilename
     try:
-      with JobLockAndWait(lockfilename, 10, printmessage=f"rsyncing {filename}"):
+      with JobLockAndWait(lockfilename, 10, task=f"rsyncing {filename}"):
         subprocess.check_call(["rsync", "-azvP"+("L" if copylinks else ""), os.fspath(filename), os.fspath(destfilename)])
     except subprocess.CalledProcessError:
       return filename
