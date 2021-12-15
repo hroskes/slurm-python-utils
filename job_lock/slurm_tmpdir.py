@@ -1,6 +1,13 @@
 from .job_lock import JobLockAndWait, SLURM_JOBID
 import contextlib, os, pathlib, shutil, subprocess
 
+def _rsync(source, dest, *, silent, copylinks):
+  args = ["-az", "--partial"]
+  if copylinks: args.append("-L")
+  if not silent: args += ["-v", "--progress"]
+  subprocess.check_call(["rsync", *args, os.fspath(source), os.fspath(dest)])
+
+
 def slurm_rsync_input(filename, *, destfilename=None, copylinks=True, silentjoblock=None, silentrsync=False):
   filename = pathlib.Path(filename)
   if destfilename is None: destfilename = filename.name
@@ -15,11 +22,7 @@ def slurm_rsync_input(filename, *, destfilename=None, copylinks=True, silentjobl
     assert lockfilename != destfilename
     try:
       with JobLockAndWait(lockfilename, 10, task=f"rsyncing {filename}", silent=silentjoblock):
-        args = ["-az", "--partial"]
-        if copylinks: args.append("-L")
-        if not silentrsync: args.append("-v", "--progress")
-        print(args)
-        subprocess.check_call(["rsync", *args, os.fspath(filename), os.fspath(destfilename)])
+        _rsync(filename, destfilename, silent=silentrsync, copylinks=copylinks)
     except subprocess.CalledProcessError:
       return filename
     return destfilename
@@ -33,10 +36,7 @@ def slurm_rsync_output(filename, *, copylinks=True, silentrsync=False):
     tmpdir = pathlib.Path(os.environ["TMPDIR"])
     tmpoutput = tmpdir/filename.name
     yield tmpoutput
-    args = ["-az", "--partial"]
-    if copylinks: args.append("-L")
-    if not silentrsync: args.append("-v", "--progress")
-    subprocess.check_call(["rsync", *args, os.fspath(tmpoutput), os.fspath(filename)])
+    _rsync(tmpoutput, filename, silent=silentrsync, copylinks=copylinks)
   else:
     yield filename
 
