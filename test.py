@@ -200,22 +200,22 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     inputfile = self.tmpdir/"input.txt"
     with open(inputfile, "w") as f: f.write("hello")
 
-    rsyncedinput = slurm_rsync_input(inputfile)
+    rsyncedinput = slurm_rsync_input(inputfile, silentrsync=True)
     self.assertEqual(inputfile, rsyncedinput)
 
     os.environ["SLURM_JOBID"] = "1234567"
-    rsyncedinput = slurm_rsync_input(inputfile)
+    rsyncedinput = slurm_rsync_input(inputfile, silentrsync=True)
     self.assertNotEqual(inputfile, rsyncedinput)
     with open(inputfile) as f1, open(rsyncedinput) as f2:
       self.assertEqual(f1.read(), f2.read())
 
   def testSlurmRsyncOutput(self):
     outputfile = self.tmpdir/"output.txt"
-    with slurm_rsync_output(outputfile) as outputtorsync:
+    with slurm_rsync_output(outputfile, silentrsync=True) as outputtorsync:
       self.assertEqual(outputfile, outputtorsync)
 
     os.environ["SLURM_JOBID"] = "1234567"
-    with slurm_rsync_output(outputfile) as outputtorsync:
+    with slurm_rsync_output(outputfile, silentrsync=True) as outputtorsync:
       self.assertNotEqual(outputfile, outputtorsync)
       with open(outputtorsync, "w") as f: f.write("hello")
     with open(outputfile) as f1, open(outputtorsync) as f2:

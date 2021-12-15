@@ -1,7 +1,7 @@
 from .job_lock import JobLockAndWait, SLURM_JOBID
 import contextlib, os, pathlib, shutil, subprocess
 
-def slurm_rsync_input(filename, *, destfilename=None, copylinks=True, silent=False):
+def slurm_rsync_input(filename, *, destfilename=None, copylinks=True, silentjoblock=False, silentrsync=False):
   filename = pathlib.Path(filename)
   if destfilename is None: destfilename = filename.name
   destfilename = pathlib.Path(destfilename)
@@ -14,8 +14,12 @@ def slurm_rsync_input(filename, *, destfilename=None, copylinks=True, silent=Fal
       lockfilename = destfilename.with_suffix(".lock_2")
     assert lockfilename != destfilename
     try:
-      with JobLockAndWait(lockfilename, 10, task=f"rsyncing {filename}", silent=silent):
-        subprocess.check_call(["rsync", "-azvP"+("L" if copylinks else ""), os.fspath(filename), os.fspath(destfilename)])
+      with JobLockAndWait(lockfilename, 10, task=f"rsyncing {filename}", silent=silentjoblock):
+        args = ["-az", "--partial"]
+        if copylinks: args.append("-L")
+        if not silentrsync: args.append("-v", "--progress")
+        print(args)
+        subprocess.check_call(["rsync", *args, os.fspath(filename), os.fspath(destfilename)])
     except subprocess.CalledProcessError:
       return filename
     return destfilename
@@ -23,13 +27,16 @@ def slurm_rsync_input(filename, *, destfilename=None, copylinks=True, silent=Fal
     return filename
 
 @contextlib.contextmanager
-def slurm_rsync_output(filename, *, copylinks=True):
+def slurm_rsync_output(filename, *, copylinks=True, silentrsync=False):
   filename = pathlib.Path(filename)
   if SLURM_JOBID() is not None:
     tmpdir = pathlib.Path(os.environ["TMPDIR"])
     tmpoutput = tmpdir/filename.name
     yield tmpoutput
-    subprocess.check_call(["rsync", "-azvP"+("L" if copylinks else ""), os.fspath(tmpoutput), os.fspath(filename)])
+    args = ["-az", "--partial"]
+    if copylinks: args.append("-L")
+    if not silentrsync: args.append("-v", "--progress")
+    subprocess.check_call(["rsync", *args, os.fspath(tmpoutput), os.fspath(filename)])
   else:
     yield filename
 
