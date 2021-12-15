@@ -1,7 +1,7 @@
 from .job_lock import JobLockAndWait, SLURM_JOBID
 import contextlib, os, pathlib, shutil, subprocess
 
-def slurm_rsync_input(filename, *, destfilename=None, copylinks=True):
+def slurm_rsync_input(filename, *, destfilename=None, copylinks=True, silent=False):
   filename = pathlib.Path(filename)
   if destfilename is None: destfilename = filename.name
   destfilename = pathlib.Path(destfilename)
@@ -14,7 +14,7 @@ def slurm_rsync_input(filename, *, destfilename=None, copylinks=True):
       lockfilename = destfilename.with_suffix(".lock_2")
     assert lockfilename != destfilename
     try:
-      with JobLockAndWait(lockfilename, 10, task=f"rsyncing {filename}"):
+      with JobLockAndWait(lockfilename, 10, task=f"rsyncing {filename}", silent=silent):
         subprocess.check_call(["rsync", "-azvP"+("L" if copylinks else ""), os.fspath(filename), os.fspath(destfilename)])
     except subprocess.CalledProcessError:
       return filename

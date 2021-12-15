@@ -116,13 +116,13 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       self.assertTrue(lock6)
 
   def testJobLockAndWait(self):
-    with JobLockAndWait(self.tmpdir/"lock1.lock", 0.001) as lock1:
+    with JobLockAndWait(self.tmpdir/"lock1.lock", 0.001, silent=True) as lock1:
       self.assertEqual(lock1.niterations, 1)
 
     with open(self.tmpdir/"lock2.lock", "w") as f:
       f.write("SLURM 0 1234567")
     with self.assertRaises(RuntimeError):
-      with JobLockAndWait(self.tmpdir/"lock2.lock", 0.001, maxiterations=10) as lock2:
+      with JobLockAndWait(self.tmpdir/"lock2.lock", 0.001, maxiterations=10, silent=True) as lock2:
         pass
 
     dummysqueue = """
@@ -137,7 +137,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     (self.tmpdir/"squeue").chmod(0o0777)
     os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
 
-    with JobLockAndWait(self.tmpdir/"lock2.lock", 0.001, maxiterations=10) as lock2:
+    with JobLockAndWait(self.tmpdir/"lock2.lock", 0.001, maxiterations=10, silent=True) as lock2:
       self.assertEqual(lock2.niterations, 2)
 
   def testCorruptFileTimeout(self):

@@ -233,13 +233,14 @@ def jobfinished(jobtype, cpuid, jobid):
       return True #job is finished
 
 class JobLockAndWait(JobLock):
-  def __init__(self, name, delay, *, printmessage=None, task="doing this", maxiterations=1000, **kwargs):
+  def __init__(self, name, delay, *, printmessage=None, task="doing this", maxiterations=1000, silent=False, **kwargs):
     super().__init__(name, **kwargs)
     self.delay = delay
     if printmessage is None:
       printmessage = "Another process is already {task}.  Waiting {delay} seconds."
     printmessage = printmessage.format(delay=delay, task=task)
     self.__printmessage = printmessage
+    self.__silent = silent
     self.niterations = 0
     self.maxiterations = maxiterations
 
@@ -250,7 +251,7 @@ class JobLockAndWait(JobLock):
       result = super().__enter__()
       if result:
         return result
-      print(self.__printmessage)
+      if not self.__silent: print(self.__printmessage)
       time.sleep(self.delay)
 
 def clean_up_old_job_locks(folder, glob="*.lock_*", howold=datetime.timedelta(days=7), dryrun=False):
