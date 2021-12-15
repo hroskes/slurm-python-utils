@@ -1,7 +1,7 @@
 from .job_lock import JobLockAndWait, SLURM_JOBID
 import contextlib, os, pathlib, shutil, subprocess
 
-def slurm_rsync_input(filename, *, destfilename=None, copylinks=True, silentjoblock=False, silentrsync=False):
+def slurm_rsync_input(filename, *, destfilename=None, copylinks=True, silentjoblock=None, silentrsync=False):
   filename = pathlib.Path(filename)
   if destfilename is None: destfilename = filename.name
   destfilename = pathlib.Path(destfilename)
