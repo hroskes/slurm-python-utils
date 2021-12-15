@@ -254,7 +254,7 @@ class JobLockAndWait(JobLock):
       if not self.__silent: print(self.__printmessage)
       time.sleep(self.delay)
 
-def clean_up_old_job_locks(folder, glob="*.lock_*", howold=datetime.timedelta(days=7), dryrun=False):
+def clean_up_old_job_locks(folder, glob="*.lock_*", howold=datetime.timedelta(days=7), dryrun=False, silent=False):
   folder = pathlib.Path(folder)
   all_locks = sorted(folder.rglob(glob))
   all_first_order_locks = sorted({filename.with_suffix(filename.suffix.split("_")[0]) for filename in all_locks})
@@ -281,13 +281,18 @@ def clean_up_old_job_locks(folder, glob="*.lock_*", howold=datetime.timedelta(da
     verb = "Removing"
     dontverb = "Keeping"
 
-  print(f"{verb} the following locks (and their iterations):")
+  if silent:
+    def doprint(*args, **kwargs): pass
+  else:
+    doprint = print
+
+  doprint(f"{verb} the following locks (and their iterations):")
   for _ in remove:
-    print(_)
+    doprint(_)
     if not dryrun:
       with JobLock(_, corruptfiletimeout=howold): pass
-  print(f"{dontverb} the following locks (and their iterations):")
-  for _ in dontremove: print(_)
+  doprint(f"{dontverb} the following locks (and their iterations):")
+  for _ in dontremove: doprint(_)
 
 class MultiJobLock(contextlib.ExitStack):
   """
