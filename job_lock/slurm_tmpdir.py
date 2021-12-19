@@ -7,34 +7,44 @@ def _rsync(source, dest, *, silent, copylinks):
   if not silent: args += ["-v", "--progress"]
   subprocess.check_call(["rsync", *args, os.fspath(source), os.fspath(dest)])
 
-
-def slurm_rsync_input(filename, *, destfilename=None, copylinks=True, silentjoblock=None, silentrsync=False):
+def slurm_rsync_input(filename, *, tempfilename=None, copylinks=True, silentjoblock=None, silentrsync=False):
   filename = pathlib.Path(filename)
-  if destfilename is None: destfilename = filename.name
-  destfilename = pathlib.Path(destfilename)
-  if destfilename.is_absolute(): raise ValueError(f"destfilename {destfilename} has to be a relative path")
+  if not filename.is_absolute(): raise ValueError(f"filename {filename} has to be an absolute path")
+
+  if tempfilename is None: tempfilename = filename.relative_to("/")
+  tempfilename = pathlib.Path(tempfilename)
+  if tempfilename.is_absolute(): raise ValueError(f"tempfilename {tempfilename} has to be a relative path")
+
   if SLURM_JOBID() is not None:
     tmpdir = pathlib.Path(os.environ["TMPDIR"])
-    destfilename = tmpdir/destfilename
-    lockfilename = destfilename.with_suffix(".lock")
-    if lockfilename == destfilename:
-      lockfilename = destfilename.with_suffix(".lock_2")
-    assert lockfilename != destfilename
+    tempfilename = tmpdir/tempfilename
+    tempfilename.parent.mkdir(exist_ok=True, parents=True)
+    lockfilename = tempfilename.with_suffix(".lock")
+    if lockfilename == tempfilename:
+      lockfilename = tempfilename.with_suffix(".lock_2")
+    assert lockfilename != tempfilename
     try:
       with JobLockAndWait(lockfilename, 10, task=f"rsyncing {filename}", silent=silentjoblock):
-        _rsync(filename, destfilename, silent=silentrsync, copylinks=copylinks)
+        _rsync(filename, tempfilename, silent=silentrsync, copylinks=copylinks)
     except subprocess.CalledProcessError:
       return filename
-    return destfilename
+    return tempfilename
   else:
     return filename
 
 @contextlib.contextmanager
-def slurm_rsync_output(filename, *, copylinks=True, silentrsync=False):
+def slurm_rsync_output(filename, *, tempfilename=None, copylinks=True, silentrsync=False):
   filename = pathlib.Path(filename)
+  if not filename.is_absolute(): raise ValueError(f"filename {filename} has to be an absolute path")
+
+  if tempfilename is None: tempfilename = filename.relative_to("/")
+  tempfilename = pathlib.Path(tempfilename)
+  if tempfilename.is_absolute(): raise ValueError(f"tempfilename {tempfilename} has to be a relative path")
+
   if SLURM_JOBID() is not None:
     tmpdir = pathlib.Path(os.environ["TMPDIR"])
-    tmpoutput = tmpdir/filename.name
+    tmpoutput = tmpdir/tempfilename
+    tmpoutput.parent.mkdir(exist_ok=True, parents=True)
     yield tmpoutput
     _rsync(tmpoutput, filename, silent=silentrsync, copylinks=copylinks)
   else:
@@ -48,4 +58,3 @@ def slurm_clean_up_temp_dir():
       shutil.rmtree(filename)
     else:
       filename.unlink()
-

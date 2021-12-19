@@ -209,6 +209,14 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with open(inputfile) as f1, open(rsyncedinput) as f2:
       self.assertEqual(f1.read(), f2.read())
 
+    inputfile2 = self.tmpdir/"subfolder"/"input.txt"
+    inputfile2.parent.mkdir()
+    with open(inputfile2, "w") as f: f.write("hello 2")
+    rsyncedinput2 = slurm_rsync_input(inputfile2, silentrsync=True)
+    with open(rsyncedinput) as f1, open(rsyncedinput2) as f2:
+      self.assertEqual(f1.read(), "hello")
+      self.assertEqual(f2.read(), "hello 2")
+
   def testSlurmRsyncOutput(self):
     outputfile = self.tmpdir/"output.txt"
     with slurm_rsync_output(outputfile, silentrsync=True) as outputtorsync:
@@ -220,6 +228,16 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       with open(outputtorsync, "w") as f: f.write("hello")
     with open(outputfile) as f1, open(outputtorsync) as f2:
       self.assertEqual(f1.read(), f2.read())
+
+    outputfile2 = self.tmpdir/"subfolder"/"output.txt"
+    outputfile2.parent.mkdir()
+    with slurm_rsync_output(outputfile, silentrsync=True) as outputtorsync, slurm_rsync_output(outputfile2, silentrsync=True) as outputtorsync2:
+      with open(outputtorsync, "w") as f1, open(outputtorsync2, "w") as f2:
+        f1.write("hello")
+        f2.write("hello 2")
+    with open(outputfile) as f1, open(outputfile2) as f2:
+      self.assertEqual(f1.read(), "hello")
+      self.assertEqual(f2.read(), "hello 2")
 
   def testSlurmCleanUpTempDir(self):
     filename = self.slurm_tmpdir/"test.txt"
