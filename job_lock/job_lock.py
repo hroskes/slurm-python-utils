@@ -14,10 +14,27 @@ def rm_missing_ok(path):
 def SLURM_JOBID():
   return os.environ.get("SLURM_JOBID", None)
 
+def cpuid():
+  node = uuid.getnode()
+  #least significant bit of the first octet is not set --> this is a hardware address
+  if not node & 2**40:
+    return node
+
+  #otherwise getnode gave us a random number!
+  for filename in "/etc/machine-id", "/var/lib/dbus/machine-id":
+    try:
+      with open(filename) as f:
+        machineid = f.read().strip()
+    except FileNotFoundError:
+      continue
+    return uuid.UUID(machineid).int
+
+  raise ValueError("Couldn't find a cpuid using any of the methods we know about")
+
 def jobinfo():
   if SLURM_JOBID() is not None:
     return "SLURM", 0, SLURM_JOBID()
-  return sys.platform, uuid.getnode(), os.getpid()
+  return sys.platform, cpuid(), os.getpid()
 
 class JobLock(object):
   defaultcorruptfiletimeout = None
