@@ -57,15 +57,19 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
 
     with JobLock(fn1, inputfiles=[input1, input2]) as lock:
       self.assertFalse(lock)
+      self.assertEqual(lock.inputsexist, {input1: False, input2: False})
     input1.touch()
     with JobLock(fn1, inputfiles=[input1, input2]) as lock:
       self.assertFalse(lock)
+      self.assertEqual(lock.inputsexist, {input1: True, input2: False})
     with JobLock(fn1, inputfiles=[input1]) as lock:
       self.assertTrue(lock)
+      self.assertEqual(lock.inputsexist, {input1: True})
 
     input2.touch()
     with JobLock(fn1, inputfiles=[input1, input2]) as lock:
       self.assertTrue(lock)
+      self.assertEqual(lock.inputsexist, {input1: True, input2: True})
 
   def testOutputFiles(self):
     fn1 = self.tmpdir/"lock1.lock"
@@ -74,15 +78,19 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
 
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertTrue(lock)
+      self.assertEqual(lock.outputsexist, {output1: False, output2: False})
     output1.touch()
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertTrue(lock)
+      self.assertEqual(lock.outputsexist, {output1: True, output2: False})
     with JobLock(fn1, outputfiles=[output1]) as lock:
       self.assertFalse(lock)
+      self.assertEqual(lock.outputsexist, {output1: True})
 
     output2.touch()
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertFalse(lock)
+      self.assertEqual(lock.outputsexist, {output1: True, output2: True})
 
     dummysqueue = """
       #!/bin/bash
@@ -99,6 +107,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       f.write("SLURM 0 1234567")
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertFalse(lock)
+      self.assertEqual(lock.outputsexist, {output1: True, output2: True})
     self.assertTrue(output1.exists())
     self.assertTrue(output2.exists())
 
@@ -106,6 +115,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       f.write("SLURM 0 1234568")
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertTrue(lock)
+      self.assertEqual(lock.outputsexist, {output1: False, output2: False})
     self.assertFalse(output1.exists())
     self.assertFalse(output2.exists())
 

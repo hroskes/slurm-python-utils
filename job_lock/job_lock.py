@@ -1,4 +1,4 @@
-import contextlib, datetime, itertools, os, pathlib, random, re, subprocess, sys, time, uuid
+import contextlib, datetime, itertools, methodtools, os, pathlib, random, re, subprocess, sys, time, uuid
 if sys.platform != "cygwin":
   import psutil
 
@@ -78,6 +78,21 @@ class JobLock(object):
       if exceptions: raise
       return None, None, None
 
+  @methodtools.lru_cache()
+  @property
+  def outputsexist(self):
+    return {_: _.exists() for _ in self.outputfiles}
+
+  @methodtools.lru_cache()
+  @property
+  def inputsexist(self):
+    return {_: _.exists() for _ in self.inputfiles}
+
+  @methodtools.lru_cache()
+  @property
+  def oldjobinfo(self):
+    return self.runningjobinfo(exceptions=True)
+
   def __open(self):
     self.fd = os.open(self.filename, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
 
@@ -119,10 +134,10 @@ class JobLock(object):
 
   def __enter__(self):
     removed_failed_job = False
-    if self.checkoutputfiles and all(_.exists() for _ in self.outputfiles) and not self.filename.exists():
-      return None
-    if self.checkinputfiles and not all(_.exists() for _ in self.inputfiles):
-      return None
+    if self.checkoutputfiles and not self.filename.exists() and all(self.outputsexist.values()):
+        return self
+    if self.checkinputfiles and not all(self.inputsexist.values()):
+        return self
     if self.mkdir:
       self.filename.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -134,14 +149,14 @@ class JobLock(object):
       #job failed at the same time, and one of them could remove
       #the lock created by the other one
       with JobLock(self.iterative_lock_filename, corruptfiletimeout=self.corruptfiletimeout) as iterative_lock:
-        if not iterative_lock: return None
+        if not iterative_lock: return self
         try:
-          oldjobinfo = self.runningjobinfo(exceptions=True)
+          self.oldjobinfo
         except (IOError, OSError):
           try:
             self.__open()
           except FileExistsError:
-            return None
+            return self
         except ValueError:
           if self.corruptfiletimeout is not None:
             modified = datetime.datetime.fromtimestamp(self.filename.stat().st_mtime)
@@ -154,13 +169,13 @@ class JobLock(object):
               try:
                 self.__open()
               except FileExistsError:
-                return None
+                return self
             else:
-              return None
+              return self
           else:
-            return None
+            return self
         else:
-          if jobfinished(*oldjobinfo):
+          if jobfinished(*self.oldjobinfo):
             for outputfile in self.outputfiles:
               rm_missing_ok(outputfile)
             rm_missing_ok(self.filename)
@@ -168,9 +183,9 @@ class JobLock(object):
             try:
               self.__open()
             except FileExistsError:
-              return None
+              return self
           else:
-            return None
+            return self
 
     self.f = os.fdopen(self.fd, 'w')
 
