@@ -41,8 +41,6 @@ class JobLock(object):
 
   def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, corruptfiletimeout=None, mkdir=False):
     self.filename = pathlib.Path(filename)
-    self.fd = self.f = None
-    self.bool = False
     self.outputfiles = [pathlib.Path(_) for _ in outputfiles]
     self.inputfiles = [pathlib.Path(_) for _ in inputfiles]
     self.checkoutputfiles = outputfiles and checkoutputfiles
@@ -52,6 +50,12 @@ class JobLock(object):
       corruptfiletimeout = self.defaultcorruptfiletimeout
     self.corruptfiletimeout = corruptfiletimeout
     self.mkdir = mkdir
+    self.__reset()
+
+  def __reset(self):
+    self.fd = self.f = None
+    self.bool = False
+    self.__inputsexist = self.__outputsexist = self.__oldjobinfo = None
 
   @property
   def wouldbevalid(self):
@@ -81,17 +85,17 @@ class JobLock(object):
   @methodtools.lru_cache()
   @property
   def outputsexist(self):
-    return {_: _.exists() for _ in self.outputfiles}
+    return self.__outputsexist
 
   @methodtools.lru_cache()
   @property
   def inputsexist(self):
-    return {_: _.exists() for _ in self.inputfiles}
+    return self.__inputsexist
 
   @methodtools.lru_cache()
   @property
   def oldjobinfo(self):
-    return self.runningjobinfo(exceptions=True)
+    return self.__oldjobinfo
 
   def __open(self):
     self.fd = os.open(self.filename, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -133,10 +137,14 @@ class JobLock(object):
           break
 
   def __enter__(self):
-    removed_failed_job = False
-    if self.checkoutputfiles and not self.filename.exists() and all(self.outputsexist.values()):
+    self.removed_failed_job = removed_failed_job = False
+    if self.checkoutputfiles and not self.filename.exists():
+      self.__outputsexist = {_: _.exists() for _ in self.outputfiles}
+      if all(self.outputsexist.values()):
         return self
-    if self.checkinputfiles and not all(self.inputsexist.values()):
+    if self.checkinputfiles:
+      self.__inputsexist = {_: _.exists() for _ in self.inputfiles}
+      if not all(self.inputsexist.values()):
         return self
     if self.mkdir:
       self.filename.parent.mkdir(parents=True, exist_ok=True)
@@ -151,13 +159,15 @@ class JobLock(object):
       with JobLock(self.iterative_lock_filename, corruptfiletimeout=self.corruptfiletimeout) as iterative_lock:
         if not iterative_lock: return self
         try:
-          self.oldjobinfo
-        except (IOError, OSError):
+          self.__oldjobinfo = self.runningjobinfo(exceptions=True)
+        except (IOError, OSError) as e:
+          self.__oldjobinfo = e
           try:
             self.__open()
           except FileExistsError:
             return self
-        except ValueError:
+        except ValueError as e:
+          self.__oldjobinfo = e
           if self.corruptfiletimeout is not None:
             modified = datetime.datetime.fromtimestamp(self.filename.stat().st_mtime)
             now = datetime.datetime.now()
@@ -179,7 +189,7 @@ class JobLock(object):
             for outputfile in self.outputfiles:
               rm_missing_ok(outputfile)
             rm_missing_ok(self.filename)
-            removed_failed_job = True
+            self.removed_failed_job = removed_failed_job = True
             try:
               self.__open()
             except FileExistsError:
@@ -212,11 +222,19 @@ class JobLock(object):
       self.clean_up_iterative_locks()
       #remove this lock file
       rm_missing_ok(self.filename)
-    self.fd = self.f = None
-    self.bool = self.removed_failed_job = False
+    self.__reset()
 
   def __bool__(self):
     return self.bool
+
+  @property
+  def debuginfo(self):
+    return {
+      "outputsexist": self.outputsexist,
+      "inputsexist": self.inputsexist,
+      "oldjobinfo": self.oldjobinfo,
+      "removed_failed_job": self.removed_failed_job,
+    }
 
 def jobfinished(jobtype, cpuid, jobid):
   if jobtype == "SLURM":
