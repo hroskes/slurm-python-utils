@@ -141,6 +141,8 @@ class JobLock(object):
     if self.checkoutputfiles and not self.filename.exists():
       self.__outputsexist = {_: _.exists() for _ in self.outputfiles}
       if all(self.outputsexist.values()):
+        with JobLock(self.filename, corruptfiletimeout=self.corruptfiletimeout):
+          pass #clean up the iterative locks
         return self
     if self.checkinputfiles:
       self.__inputsexist = {_: _.exists() for _ in self.inputfiles}

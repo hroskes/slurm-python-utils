@@ -74,8 +74,12 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
 
   def testOutputFiles(self):
     fn1 = self.tmpdir/"lock1.lock"
+    fn2 = self.tmpdir/"lock1.lock_2"
     output1 = self.tmpdir/"outputfile1.txt"
     output2 = self.tmpdir/"outputfile2.txt"
+
+    with open(fn2, "w") as f:
+      f.write("SLURM 0 1234568")
 
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertTrue(lock)
@@ -92,6 +96,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertFalse(lock)
       self.assertEqual(lock.debuginfo, {"outputsexist": {output1: True, output2: True}, "inputsexist": None, "oldjobinfo": None, "removed_failed_job": False})
+    self.assertTrue(fn2.exists()) #should not have cleaned up the iterative locks
 
     dummysqueue = """
       #!/bin/bash
@@ -111,6 +116,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "oldjobinfo": ("SLURM", 0, 1234567), "removed_failed_job": False})
     self.assertTrue(output1.exists())
     self.assertTrue(output2.exists())
+    self.assertFalse(fn2.exists()) #should have cleaned up the iterative locks
 
     with open(fn1, "w") as f:
       f.write("SLURM 0 1234568")
