@@ -11,6 +11,7 @@ setuptools.setup(
   author_email = "heshyr@gmail.com",
   url = "https://github.com/hroskes/slurm-python-utils",
   install_requires = [
+    "methodtools",
     "psutil;sys_platform!='cygwin'",
   ],
   long_description = long_description,
