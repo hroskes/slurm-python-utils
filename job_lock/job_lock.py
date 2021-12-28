@@ -129,20 +129,22 @@ class JobLock(object):
 
     filenames = iterative_lock_filename.parent.glob(iterative_lock_filename.with_suffix(".lock").name+"*")
     filenames = [_ for _ in filenames if n_from_filename(_) > my_n]
+    if not filenames: return
     filenames.sort(key=n_from_filename, reverse=True)
 
-    for filename in filenames:
-      with JobLock(filename, corruptfiletimeout=self.corruptfiletimeout) as lock:
-        if not lock:
-          break
+    with JobLock(self.filename.with_suffix(".cleanup.lock")) as lock:
+      if not lock: return
+      for filename in filenames:
+        with JobLock(filename, corruptfiletimeout=self.corruptfiletimeout) as lock:
+          if not lock:
+            break
 
   def __enter__(self):
     self.removed_failed_job = removed_failed_job = False
     if self.checkoutputfiles and not self.filename.exists():
       self.__outputsexist = {_: _.exists() for _ in self.outputfiles}
       if all(self.outputsexist.values()):
-        with JobLock(self.filename, corruptfiletimeout=self.corruptfiletimeout):
-          pass #clean up the iterative locks
+        self.clean_up_iterative_locks()
         return self
     if self.checkinputfiles:
       self.__inputsexist = {_: _.exists() for _ in self.inputfiles}
