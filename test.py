@@ -50,6 +50,65 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
         self.assertFalse(fn1.exists())
         self.assertTrue(fn2.exists())
 
+  def testInputFiles(self):
+    fn1 = self.tmpdir/"lock1.lock"
+    input1 = self.tmpdir/"inputfile1.txt"
+    input2 = self.tmpdir/"inputfile2.txt"
+
+    with JobLock(fn1, inputfiles=[input1, input2]) as lock:
+      self.assertFalse(lock)
+    input1.touch()
+    with JobLock(fn1, inputfiles=[input1, input2]) as lock:
+      self.assertFalse(lock)
+    with JobLock(fn1, inputfiles=[input1]) as lock:
+      self.assertTrue(lock)
+
+    input2.touch()
+    with JobLock(fn1, inputfiles=[input1, input2]) as lock:
+      self.assertTrue(lock)
+
+  def testOutputFiles(self):
+    fn1 = self.tmpdir/"lock1.lock"
+    output1 = self.tmpdir/"outputfile1.txt"
+    output2 = self.tmpdir/"outputfile2.txt"
+
+    with JobLock(fn1, outputfiles=[output1, output2]) as lock:
+      self.assertTrue(lock)
+    output1.touch()
+    with JobLock(fn1, outputfiles=[output1, output2]) as lock:
+      self.assertTrue(lock)
+    with JobLock(fn1, outputfiles=[output1]) as lock:
+      self.assertFalse(lock)
+
+    output2.touch()
+    with JobLock(fn1, outputfiles=[output1, output2]) as lock:
+      self.assertFalse(lock)
+
+    dummysqueue = """
+      #!/bin/bash
+      echo '
+           1234567   RUNNING
+      '
+    """.lstrip()
+    with open(self.tmpdir/"squeue", "w") as f:
+      f.write(dummysqueue)
+    (self.tmpdir/"squeue").chmod(0o0777)
+    os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
+
+    with open(fn1, "w") as f:
+      f.write("SLURM 0 1234567")
+    with JobLock(fn1, outputfiles=[output1, output2]) as lock:
+      self.assertFalse(lock)
+    self.assertTrue(output1.exists())
+    self.assertTrue(output2.exists())
+
+    with open(fn1, "w") as f:
+      f.write("SLURM 0 1234568")
+    with JobLock(fn1, outputfiles=[output1, output2]) as lock:
+      self.assertTrue(lock)
+    self.assertFalse(output1.exists())
+    self.assertFalse(output2.exists())
+
   def testRunningJobs(self):
     jobtype, cpuid, jobid = jobinfo()
     with open(self.tmpdir/"lock1.lock", "w") as f:
