@@ -7,7 +7,7 @@ def _rsync(source, dest, *, silent, copylinks):
   if not silent: args += ["-v", "--progress"]
   subprocess.check_call(["rsync", *args, os.fspath(source), os.fspath(dest)])
 
-def slurm_rsync_input(filename, *, tempfilename=None, copylinks=True, silentjoblock=None, silentrsync=False):
+def slurm_rsync_input(filename, *, tempfilename=None, copylinks=True, silentjoblock=None, silentrsync=None):
   filename = pathlib.Path(filename)
   if not filename.is_absolute(): raise ValueError(f"filename {filename} has to be an absolute path")
 
@@ -33,7 +33,7 @@ def slurm_rsync_input(filename, *, tempfilename=None, copylinks=True, silentjobl
     return filename
 
 @contextlib.contextmanager
-def slurm_rsync_output(filename, *, tempfilename=None, copylinks=True, silentrsync=False):
+def slurm_rsync_output(filename, *, tempfilename=None, copylinks=True, silentrsync=None):
   filename = pathlib.Path(filename)
   if not filename.is_absolute(): raise ValueError(f"filename {filename} has to be an absolute path")
 
