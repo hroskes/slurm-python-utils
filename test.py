@@ -244,8 +244,9 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       p = multiprocessing.Process(target=inner)
       p.start()
 
-    touchlater(inputfile, 0.0015)
-    with JobLockAndWait(self.tmpdir/"lock3.lock", 0.001, maxiterations=10, silent=True, inputfiles=[inputfile], waitforinputs=True) as lock3:
+    iterationtime = 0.01
+    touchlater(inputfile, iterationtime * 1.5)
+    with JobLockAndWait(self.tmpdir/"lock3.lock", iterationtime, maxiterations=10, silent=True, inputfiles=[inputfile], waitforinputs=True) as lock3:
       self.assertTrue(lock3)
       self.assertEqual(lock3.niterations, 3)
 
