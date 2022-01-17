@@ -1,4 +1,4 @@
-import contextlib, datetime, itertools, methodtools, os, pathlib, random, re, subprocess, sys, time, uuid
+import contextlib, datetime, itertools, os, pathlib, random, re, subprocess, sys, time, uuid
 if sys.platform != "cygwin":
   import psutil
 
@@ -82,17 +82,14 @@ class JobLock(object):
       if exceptions: raise
       return None, None, None
 
-  @methodtools.lru_cache()
   @property
   def outputsexist(self):
     return self.__outputsexist
 
-  @methodtools.lru_cache()
   @property
   def inputsexist(self):
     return self.__inputsexist
 
-  @methodtools.lru_cache()
   @property
   def oldjobinfo(self):
     return self.__oldjobinfo
