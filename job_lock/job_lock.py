@@ -289,7 +289,7 @@ def jobfinished(jobtype, cpuid, jobid):
 class JobLockAndWait(JobLock):
   defaultsilent = False
 
-  def __init__(self, name, delay, *, printmessage=None, task="doing this", maxiterations=1000, silent=None, **kwargs):
+  def __init__(self, name, delay, *, printmessage=None, task="doing this", maxiterations=1000, silent=None, waitforinputs=False, **kwargs):
     super().__init__(name, **kwargs)
     self.delay = delay
     if printmessage is None:
@@ -299,6 +299,7 @@ class JobLockAndWait(JobLock):
     if silent is None:
       silent = self.defaultsilent
     self.__silent = silent
+    self.__waitforinputs = waitforinputs
     self.niterations = 0
     self.maxiterations = maxiterations
 
@@ -309,7 +310,18 @@ class JobLockAndWait(JobLock):
       result = super().__enter__()
       if result:
         return result
-      if not self.__silent: print(self.__printmessage)
+      elif self.checkoutputfiles and self.outputsexist is not None and all(self.outputsexist.values()):
+        return result
+      elif self.checkinputfiles and self.inputsexist is not None:
+        missinginputs = [k for k, v in self.inputsexist.items() if not v]
+        if missinginputs:
+          message = f"Some input files are missing: {', '.join(str(_) for _ in missinginputs)}."
+          if self.__waitforinputs:
+            if not self.__silent: print(f"{message} Waiting {self.delay} seconds.")
+          else:
+            raise FileNotFoundError(message)
+      else:
+        if not self.__silent: print(self.__printmessage)
       time.sleep(self.delay)
 
 def clean_up_old_job_locks(folder, glob="*.lock_*", howold=datetime.timedelta(days=7), dryrun=False, silent=False):

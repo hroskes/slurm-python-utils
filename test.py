@@ -1,4 +1,4 @@
-import contextlib, datetime, os, pathlib, subprocess, tempfile, time, unittest
+import contextlib, datetime, multiprocessing, os, pathlib, subprocess, tempfile, time, unittest
 from job_lock import clean_up_old_job_locks, JobLock, JobLockAndWait, jobinfo, MultiJobLock, slurm_clean_up_temp_dir, slurm_rsync_input, slurm_rsync_output
 
 class TestJobLock(unittest.TestCase, contextlib.ExitStack):
@@ -215,6 +215,39 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
 
     with JobLockAndWait(self.tmpdir/"lock2.lock", 0.001, maxiterations=10, silent=True) as lock2:
       self.assertEqual(lock2.niterations, 2)
+
+    inputfile = self.tmpdir/"input.txt"
+    outputfile = self.tmpdir/"output.txt"
+
+    with JobLockAndWait(self.tmpdir/"lock3.lock", 0.001, maxiterations=10, silent=True, outputfiles=[outputfile]) as lock3:
+      self.assertTrue(lock3)
+      self.assertEqual(lock3.niterations, 1)
+
+    outputfile.touch()
+
+    with JobLockAndWait(self.tmpdir/"lock3.lock", 0.001, maxiterations=10, silent=True, outputfiles=[outputfile]) as lock3:
+      self.assertFalse(lock3)
+
+    with JobLockAndWait(self.tmpdir/"lock3.lock", 0.001, maxiterations=10, silent=True, outputfiles=[outputfile], inputfiles=[inputfile]) as lock3:
+      self.assertFalse(lock3)
+
+    outputfile.unlink()
+
+    with self.assertRaises(FileNotFoundError):
+      with JobLockAndWait(self.tmpdir/"lock3.lock", 0.001, maxiterations=10, silent=True, outputfiles=[outputfile], inputfiles=[inputfile]) as lock3:
+        pass
+
+    def touchlater(filename, delay):
+      def inner():
+        time.sleep(delay)
+        filename.touch()
+      p = multiprocessing.Process(target=inner)
+      p.start()
+
+    touchlater(inputfile, 0.0015)
+    with JobLockAndWait(self.tmpdir/"lock3.lock", 0.001, maxiterations=10, silent=True, inputfiles=[inputfile], waitforinputs=True) as lock3:
+      self.assertTrue(lock3)
+      self.assertEqual(lock3.niterations, 3)
 
   def testCorruptFileTimeout(self):
     with open(self.tmpdir/"lock1.lock_2", "w"): pass
