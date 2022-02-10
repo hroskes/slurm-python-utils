@@ -15,12 +15,11 @@ def slurm_rsync_input(filename, *, tempfilename=None, copylinks=True, silentjobl
   tempfilename = pathlib.Path(tempfilename)
   if tempfilename.is_absolute(): raise ValueError(f"tempfilename {tempfilename} has to be a relative path")
 
-  if silentrsync is None:
-    silentrsync = tempfilename.exists()
-
   if SLURM_JOBID() is not None:
     tmpdir = pathlib.Path(os.environ["TMPDIR"])
     tempfilename = tmpdir/tempfilename
+    if silentrsync is None:
+      silentrsync = tempfilename.exists()
     tempfilename.parent.mkdir(exist_ok=True, parents=True)
     lockfilename = tempfilename.with_suffix(".lock")
     if lockfilename == tempfilename:
@@ -44,12 +43,11 @@ def slurm_rsync_output(filename, *, tempfilename=None, copylinks=True, silentrsy
   tempfilename = pathlib.Path(tempfilename)
   if tempfilename.is_absolute(): raise ValueError(f"tempfilename {tempfilename} has to be a relative path")
 
-  if silentrsync is None:
-    silentrsync = False
-
   if SLURM_JOBID() is not None:
     tmpdir = pathlib.Path(os.environ["TMPDIR"])
     tmpoutput = tmpdir/tempfilename
+    if silentrsync is None:
+      silentrsync = False
     tmpoutput.parent.mkdir(exist_ok=True, parents=True)
     yield tmpoutput
     _rsync(tmpoutput, filename, silent=silentrsync, copylinks=copylinks)
