@@ -15,6 +15,9 @@ def slurm_rsync_input(filename, *, tempfilename=None, copylinks=True, silentjobl
   tempfilename = pathlib.Path(tempfilename)
   if tempfilename.is_absolute(): raise ValueError(f"tempfilename {tempfilename} has to be a relative path")
 
+  if silentrsync is None:
+    silentrsync = tempfilename.exists()
+
   if SLURM_JOBID() is not None:
     tmpdir = pathlib.Path(os.environ["TMPDIR"])
     tempfilename = tmpdir/tempfilename
@@ -40,6 +43,9 @@ def slurm_rsync_output(filename, *, tempfilename=None, copylinks=True, silentrsy
   if tempfilename is None: tempfilename = filename.relative_to("/")
   tempfilename = pathlib.Path(tempfilename)
   if tempfilename.is_absolute(): raise ValueError(f"tempfilename {tempfilename} has to be a relative path")
+
+  if silentrsync is None:
+    silentrsync = False
 
   if SLURM_JOBID() is not None:
     tmpdir = pathlib.Path(os.environ["TMPDIR"])
