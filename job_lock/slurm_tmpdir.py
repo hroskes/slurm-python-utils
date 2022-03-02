@@ -35,7 +35,7 @@ def slurm_rsync_input(filename, *, tempfilename=None, copylinks=True, silentjobl
     return filename
 
 @contextlib.contextmanager
-def slurm_rsync_output(filename, *, tempfilename=None, copylinks=True, silentrsync=None):
+def slurm_rsync_output(filename, *, tempfilename=None, copylinks=True, silentrsync=None, ok_if_not_created=False):
   filename = pathlib.Path(filename)
   if not filename.is_absolute(): raise ValueError(f"filename {filename} has to be an absolute path")
 
@@ -50,6 +50,11 @@ def slurm_rsync_output(filename, *, tempfilename=None, copylinks=True, silentrsy
       silentrsync = False
     tmpoutput.parent.mkdir(exist_ok=True, parents=True)
     yield tmpoutput
+    if not tmpoutput.exists():
+      if ok_if_not_created:
+        return
+      else:
+        raise FileNotFoundError(f"{tmpoutput} was not created in the with block")
     _rsync(tmpoutput, filename, silent=silentrsync, copylinks=copylinks)
   else:
     yield filename
