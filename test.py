@@ -363,9 +363,9 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     outputfile = self.tmpdir/"output.txt"
     os.environ["SLURM_JOBID"] = "1234567"
     with self.assertRaises(FileNotFoundError):
-      with slurm_rsync_output(outputfile, silentrsync=True) as outputtorsync:
+      with slurm_rsync_output(outputfile, silentrsync=True):
         pass
 
-    with slurm_rsync_output(outputfile, silentrsync=True, ok_if_not_created=True) as outputtorsync:
+    with slurm_rsync_output(outputfile, silentrsync=True, ok_if_not_created=True):
       pass
 
