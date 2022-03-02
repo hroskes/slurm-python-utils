@@ -28,7 +28,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
         self.assertTrue(lock2)
       with JobLock(self.tmpdir/"lock1.lock") as lock3:
         self.assertFalse(lock3)
-        self.assertEqual(lock3.debuginfo, {"outputsexist": None, "inputsexist": None, "oldjobinfo": jobinfo(), "removed_failed_job": False})
+        self.assertEqual(lock3.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": jobinfo(), "removed_failed_job": False})
 
   def testMultiJobLock(self):
     fn1 = self.tmpdir/"lock1.lock"
@@ -58,19 +58,19 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
 
     with JobLock(fn1, inputfiles=[input1, input2]) as lock:
       self.assertFalse(lock)
-      self.assertEqual(lock.debuginfo, {"inputsexist": {input1: False, input2: False}, "outputsexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"inputsexist": {input1: False, input2: False}, "outputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
     input1.touch()
     with JobLock(fn1, inputfiles=[input1, input2]) as lock:
       self.assertFalse(lock)
-      self.assertEqual(lock.debuginfo, {"inputsexist": {input1: True, input2: False}, "outputsexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"inputsexist": {input1: True, input2: False}, "outputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
     with JobLock(fn1, inputfiles=[input1]) as lock:
       self.assertTrue(lock)
-      self.assertEqual(lock.debuginfo, {"inputsexist": {input1: True}, "outputsexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"inputsexist": {input1: True}, "outputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
 
     input2.touch()
     with JobLock(fn1, inputfiles=[input1, input2]) as lock:
       self.assertTrue(lock)
-      self.assertEqual(lock.debuginfo, {"inputsexist": {input1: True, input2: True}, "outputsexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"inputsexist": {input1: True, input2: True}, "outputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
 
   def testOutputFiles(self):
     fn1 = self.tmpdir/"lock1.lock"
@@ -83,19 +83,19 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
 
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertTrue(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": {output1: False, output2: False}, "inputsexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"outputsexist": {output1: False, output2: False}, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
     output1.touch()
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertTrue(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": {output1: True, output2: False}, "inputsexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"outputsexist": {output1: True, output2: False}, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
     with JobLock(fn1, outputfiles=[output1]) as lock:
       self.assertFalse(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": {output1: True}, "inputsexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"outputsexist": {output1: True}, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
 
     output2.touch()
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertFalse(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": {output1: True, output2: True}, "inputsexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"outputsexist": {output1: True, output2: True}, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
     self.assertTrue(fn2.exists()) #should not have cleaned up the iterative locks
 
     dummysqueue = """
@@ -113,7 +113,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       f.write("SLURM 0 1234567")
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertFalse(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "oldjobinfo": ("SLURM", 0, 1234567), "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": ("SLURM", 0, 1234567), "removed_failed_job": False})
     self.assertTrue(output1.exists())
     self.assertTrue(output2.exists())
     self.assertFalse(fn2.exists()) #should have cleaned up the iterative locks
@@ -122,9 +122,48 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       f.write("SLURM 0 1234568")
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertTrue(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "oldjobinfo": ("SLURM", 0, 1234568), "removed_failed_job": True})
+      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": ("SLURM", 0, 1234568), "removed_failed_job": True})
     self.assertFalse(output1.exists())
     self.assertFalse(output2.exists())
+
+  def testPrevStepLockFiles(self):
+    fn1 = self.tmpdir/"lock1.lock"
+    fn2 = self.tmpdir/"lock2.lock"
+
+    with JobLock(fn2, prevsteplockfiles=[fn1]) as lock:
+      self.assertTrue(lock)
+      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": {fn1: False}, "oldjobinfo": None, "removed_failed_job": False})
+
+    with JobLock(fn1) as lock:
+      self.assertTrue(lock)
+      with JobLock(fn2, prevsteplockfiles=[fn1]) as lock2:
+        self.assertFalse(lock2)
+        self.assertEqual(lock2.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": {fn1: True}, "oldjobinfo": None, "removed_failed_job": False})
+
+    dummysqueue = """
+      #!/bin/bash
+      echo '
+           1234567   RUNNING
+      '
+    """.lstrip()
+    with open(self.tmpdir/"squeue", "w") as f:
+      f.write(dummysqueue)
+    (self.tmpdir/"squeue").chmod(0o0777)
+    os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
+
+    with open(fn1, "w") as f:
+      f.write("SLURM 0 1234567")
+
+    with JobLock(fn2, prevsteplockfiles=[fn1]) as lock:
+      self.assertFalse(lock)
+      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": {fn1: True}, "oldjobinfo": None, "removed_failed_job": False})
+
+    with open(fn1, "w") as f:
+      f.write("SLURM 0 1234568")
+
+    with JobLock(fn2, prevsteplockfiles=[fn1]) as lock:
+      self.assertTrue(lock)
+      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": {fn1: False}, "oldjobinfo": None, "removed_failed_job": False})
 
   def testRunningJobs(self):
     jobtype, cpuid, jobid = jobinfo()

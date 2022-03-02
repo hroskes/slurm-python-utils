@@ -39,12 +39,14 @@ def jobinfo():
 class JobLock(object):
   defaultcorruptfiletimeout = None
 
-  def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, corruptfiletimeout=None, mkdir=False):
+  def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, prevsteplockfiles=[], corruptfiletimeout=None, mkdir=False):
     self.filename = pathlib.Path(filename)
     self.outputfiles = [pathlib.Path(_) for _ in outputfiles]
     self.inputfiles = [pathlib.Path(_) for _ in inputfiles]
+    self.prevsteplockfiles = [pathlib.Path(_) for _ in prevsteplockfiles]
     self.checkoutputfiles = outputfiles and checkoutputfiles
     self.checkinputfiles = inputfiles and checkinputfiles
+    self.checkprevsteplockfiles = prevsteplockfiles
     self.removed_failed_job = False
     if corruptfiletimeout is None:
       corruptfiletimeout = self.defaultcorruptfiletimeout
@@ -55,7 +57,7 @@ class JobLock(object):
   def __reset(self):
     self.fd = self.f = None
     self.bool = False
-    self.__inputsexist = self.__outputsexist = self.__oldjobinfo = None
+    self.__inputsexist = self.__outputsexist = self.__prevsteplockfilesexist = self.__oldjobinfo = None
 
   @property
   def wouldbevalid(self):
@@ -89,6 +91,10 @@ class JobLock(object):
   @property
   def inputsexist(self):
     return self.__inputsexist
+
+  @property
+  def prevsteplockfilesexist(self):
+    return self.__prevsteplockfilesexist
 
   @property
   def oldjobinfo(self):
@@ -146,6 +152,10 @@ class JobLock(object):
     if self.checkinputfiles:
       self.__inputsexist = {_: _.exists() for _ in self.inputfiles}
       if not all(self.inputsexist.values()):
+        return self
+    if self.checkprevsteplockfiles:
+      self.__prevsteplockfilesexist = {_: not JobLock(_, corruptfiletimeout=self.corruptfiletimeout).wouldbevalid for _ in self.prevsteplockfiles}
+      if any(self.prevsteplockfilesexist.values()):
         return self
     if self.mkdir:
       self.filename.parent.mkdir(parents=True, exist_ok=True)
@@ -233,6 +243,7 @@ class JobLock(object):
     return {
       "outputsexist": self.outputsexist,
       "inputsexist": self.inputsexist,
+      "prevsteplockfilesexist": self.prevsteplockfilesexist,
       "oldjobinfo": self.oldjobinfo,
       "removed_failed_job": self.removed_failed_job,
     }
