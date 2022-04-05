@@ -120,6 +120,9 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
 
     with open(fn1, "w") as f:
       f.write("SLURM 0 1234568")
+    with JobLock(fn1, outputfiles=[output1, output2], dosqueue=False) as lock:
+      self.assertFalse(lock)
+      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": ("SLURM", 0, 1234568), "removed_failed_job": False})
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertTrue(lock)
       self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": ("SLURM", 0, 1234568), "removed_failed_job": True})

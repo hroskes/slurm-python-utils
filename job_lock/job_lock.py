@@ -39,7 +39,7 @@ def jobinfo():
 class JobLock(object):
   defaultcorruptfiletimeout = None
 
-  def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, prevsteplockfiles=[], corruptfiletimeout=None, mkdir=False):
+  def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, prevsteplockfiles=[], corruptfiletimeout=None, mkdir=False, dosqueue=True):
     self.filename = pathlib.Path(filename)
     self.outputfiles = [pathlib.Path(_) for _ in outputfiles]
     self.inputfiles = [pathlib.Path(_) for _ in inputfiles]
@@ -52,6 +52,7 @@ class JobLock(object):
       corruptfiletimeout = self.defaultcorruptfiletimeout
     self.corruptfiletimeout = corruptfiletimeout
     self.mkdir = mkdir
+    self.dosqueue = dosqueue
     self.__reset()
 
   def __reset(self):
@@ -196,7 +197,7 @@ class JobLock(object):
           else:
             return self
         else:
-          if jobfinished(*self.oldjobinfo):
+          if jobfinished(*self.oldjobinfo, dosqueue=self.dosqueue):
             for outputfile in self.outputfiles:
               rm_missing_ok(outputfile)
             rm_missing_ok(self.filename)
@@ -248,8 +249,9 @@ class JobLock(object):
       "removed_failed_job": self.removed_failed_job,
     }
 
-def jobfinished(jobtype, cpuid, jobid):
+def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True):
   if jobtype == "SLURM":
+    if not dosqueue: return None #don't know if the job finished
     try:
       output = subprocess.check_output(["squeue", "--job", str(jobid), "--format", "jobid,state", "--noheader"], stderr=subprocess.STDOUT)
       for line in output.split(b"\n"):
