@@ -233,6 +233,43 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with JobLock(self.tmpdir/"lock6.lock") as lock6:
       self.assertTrue(lock6)
 
+  def testcondor(self):
+    dummycondor_q = """
+      #!/bin/bash
+      echo '
+        -- Schedd: my schedd
+         ID      OWNER            SUBMITTED     RUN_TIME ST PRI SIZE CMD
+         1234567.1
+         1234568.1
+      '
+    """.lstrip()
+    with open(self.tmpdir/"condor_q", "w") as f:
+      f.write(dummycondor_q)
+    (self.tmpdir/"condor_q").chmod(0o0777)
+    os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
+
+    with open(self.tmpdir/"lock1.lock", "w") as f:
+      f.write("SLURM 1234567 1")
+    with open(self.tmpdir/"lock2.lock", "w") as f:
+      f.write("CONDOR 1234567 1")
+    with open(self.tmpdir/"lock3.lock", "w") as f:
+      f.write("CONDOR 12345678 1")
+    with open(self.tmpdir/"lock4.lock", "w") as f:
+      f.write("CONDOR 1234568 1")
+    with open(self.tmpdir/"lock5.lock", "w") as f:
+      f.write("CONDOR 1234567 2")
+
+    with JobLock(self.tmpdir/"lock1.lock") as lock1:
+      self.assertFalse(lock1)
+    with JobLock(self.tmpdir/"lock2.lock") as lock2:
+      self.assertFalse(lock2)
+    with JobLock(self.tmpdir/"lock3.lock") as lock3:
+      self.assertTrue(lock3)
+    with JobLock(self.tmpdir/"lock4.lock") as lock4:
+      self.assertFalse(lock4)
+    with JobLock(self.tmpdir/"lock5.lock") as lock5:
+      self.assertTrue(lock5)
+
   def testJobLockAndWait(self):
     with JobLockAndWait(self.tmpdir/"lock1.lock", 0.001, silent=True) as lock1:
       self.assertEqual(lock1.niterations, 1)

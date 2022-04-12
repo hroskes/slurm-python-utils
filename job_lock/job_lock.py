@@ -13,6 +13,12 @@ def rm_missing_ok(path):
 
 def SLURM_JOBID():
   return os.environ.get("SLURM_JOBID", None)
+def CONDOR_JOBINFO():
+  if "_CONDOR_SCRATCH_DIR" not in os.environ: return None
+  try:
+    return os.environ["CONDOR_CLUSTERID"], os.environ["CONDOR_PROCID"]
+  except KeyError:
+    raise OSError("Please put 'environment = CONDOR_cLUSTERID=$(ClusterId) CONDOR_PROCID=$(ProcId)' in your condor submission script")
 
 def cpuid():
   node = uuid.getnode()
@@ -32,8 +38,12 @@ def cpuid():
   raise ValueError("Couldn't find a cpuid using any of the methods we know about")
 
 def jobinfo():
-  if SLURM_JOBID() is not None:
-    return "SLURM", 0, SLURM_JOBID()
+  slurm = SLURM_JOBID()
+  if slurm is not None:
+    return "SLURM", 0, slurm
+  condor = CONDOR_JOBINFO()
+  if condor is not None:
+    return "CONDOR", condor[0], condor[1]
   return sys.platform, cpuid(), os.getpid()
 
 class JobLock(object):
@@ -275,6 +285,28 @@ def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True):
     except subprocess.CalledProcessError as e:
       if b"slurm_load_jobs error: Invalid job id specified" in e.output:
         return True #job is finished
+      print(e.output)
+      raise
+  elif jobtype == "CONDOR":
+    if not dosqueue: return None #don't know if the job finished
+    try:
+      output = subprocess.check_output(["condor_q", "-nobatch", "-run"], stderr=subprocess.STDOUT)
+      for line in output.split(b"\n"):
+        line = line.strip()
+        if not line: continue
+        if line.startswith(b"-- Schedd:"): continue
+        if line.startswith(b"ID "): continue
+        runningjobid = line.split()[0]
+        try:
+          runningclusterid, runningprocid = (int(_) for _ in runningjobid.split(b"."))
+        except ValueError:
+          return None #don't know if the job finished, probably a temporary glitch in squeue
+        if runningclusterid == cpuid and runningprocid == jobid:
+          return False #job is still running
+      return True #job is finished
+    except FileNotFoundError:  #no squeue
+      return None  #we don't know if the job finished
+    except subprocess.CalledProcessError as e:
       print(e.output)
       raise
   else:
