@@ -327,7 +327,8 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     touchlater(inputfile, iterationtime * 1.5)
     with JobLockAndWait(self.tmpdir/"lock3.lock", iterationtime, maxiterations=10, silent=True, inputfiles=[inputfile], waitforinputs=True) as lock3:
       self.assertTrue(lock3)
-      self.assertEqual(lock3.niterations, 3)
+      self.assertGreaterEqual(lock3.niterations, 3)
+      self.assertLessEqual(lock3.niterations, 4)
 
   def testCorruptFileTimeout(self):
     with open(self.tmpdir/"lock1.lock_2", "w"): pass
