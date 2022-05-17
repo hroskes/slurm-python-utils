@@ -49,7 +49,7 @@ def jobinfo():
 class JobLock(object):
   defaultcorruptfiletimeout = None
 
-  def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, prevsteplockfiles=[], corruptfiletimeout=None, mkdir=False, dosqueue=True):
+  def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, prevsteplockfiles=[], corruptfiletimeout=None, mkdir=False, dosqueue=True, cachesqueue=False):
     self.filename = pathlib.Path(filename)
     self.outputfiles = [pathlib.Path(_) for _ in outputfiles]
     self.inputfiles = [pathlib.Path(_) for _ in inputfiles]
@@ -63,6 +63,15 @@ class JobLock(object):
     self.corruptfiletimeout = corruptfiletimeout
     self.mkdir = mkdir
     self.dosqueue = dosqueue
+    self.cachesqueue = cachesqueue
+    self.sublockkwargs = {
+      "checkoutputfiles": checkoutputfiles,
+      "checkinputfiles": checkinputfiles,
+      "mkdir": mkdir,
+      "dosqueue": dosqueue,
+      "cachesqueue": cachesqueue,
+      "corruptfiletimeout": corruptfiletimeout,
+    }
     self.__reset()
 
   def __reset(self):
@@ -146,10 +155,10 @@ class JobLock(object):
     if not filenames: return
     filenames.sort(key=n_from_filename, reverse=True)
 
-    with JobLock(self.filename.with_suffix(".cleanup.lock")) as lock:
+    with JobLock(self.filename.with_suffix(".cleanup.lock"), **self.sublockkwargs) as lock:
       if not lock: return
       for filename in filenames:
-        with JobLock(filename, corruptfiletimeout=self.corruptfiletimeout) as lock:
+        with JobLock(filename, **self.sublockkwargs) as lock:
           if not lock:
             break
 
@@ -165,7 +174,7 @@ class JobLock(object):
       if not all(self.inputsexist.values()):
         return self
     if self.checkprevsteplockfiles:
-      self.__prevsteplockfilesexist = {_: not JobLock(_, corruptfiletimeout=self.corruptfiletimeout).wouldbevalid for _ in self.prevsteplockfiles}
+      self.__prevsteplockfilesexist = {_: not JobLock(_, **self.sublockkwargs).wouldbevalid for _ in self.prevsteplockfiles}
       if any(self.prevsteplockfilesexist.values()):
         return self
     if self.mkdir:
@@ -178,7 +187,7 @@ class JobLock(object):
       #a race condition: two jobs could be looking if the previous
       #job failed at the same time, and one of them could remove
       #the lock created by the other one
-      with JobLock(self.iterative_lock_filename, corruptfiletimeout=self.corruptfiletimeout) as iterative_lock:
+      with JobLock(self.iterative_lock_filename, **self.sublockkwargs) as iterative_lock:
         if not iterative_lock: return self
         try:
           self.__oldjobinfo = self.runningjobinfo(exceptions=True)
@@ -207,7 +216,7 @@ class JobLock(object):
           else:
             return self
         else:
-          if jobfinished(*self.oldjobinfo, dosqueue=self.dosqueue):
+          if jobfinished(*self.oldjobinfo, dosqueue=self.dosqueue, cachesqueue=self.cachesqueue):
             for outputfile in self.outputfiles:
               rm_missing_ok(outputfile)
             rm_missing_ok(self.filename)
@@ -259,8 +268,14 @@ class JobLock(object):
       "removed_failed_job": self.removed_failed_job,
     }
 
-def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True):
+__knownrunningslurmjobs = set()
+
+def clear_slurm_running_jobs_cache():
+  __knownrunningslurmjobs.clear()
+
+def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True):
   if jobtype == "SLURM":
+    if cachesqueue and jobid in __knownrunningslurmjobs: return False #assume job is still running
     if not dosqueue: return None #don't know if the job finished
     try:
       output = subprocess.check_output(["squeue", "--job", str(jobid), "--format", "jobid,state", "--noheader"], stderr=subprocess.STDOUT)
@@ -278,6 +293,7 @@ def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True):
             #this can happen if the job was cancelled due to node failure and was automatically resubmitted
             return True #job is not currently running
           else:
+            __knownrunningslurmjobs.add(jobid)
             return False #job is still running
       return True #job is finished
     except FileNotFoundError:  #no squeue

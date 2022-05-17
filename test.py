@@ -1,5 +1,5 @@
 import contextlib, datetime, multiprocessing, os, pathlib, subprocess, tempfile, time, unittest
-from job_lock import clean_up_old_job_locks, JobLock, JobLockAndWait, jobinfo, MultiJobLock, slurm_clean_up_temp_dir, slurm_rsync_input, slurm_rsync_output
+from job_lock import clean_up_old_job_locks, clear_slurm_running_jobs_cache, JobLock, JobLockAndWait, jobinfo, MultiJobLock, slurm_clean_up_temp_dir, slurm_rsync_input, slurm_rsync_output
 
 class TestJobLock(unittest.TestCase, contextlib.ExitStack):
   def __init__(self, *args, **kwargs):
@@ -14,6 +14,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     self.slurm_tmpdir = self.tmpdir/"slurm_tmpdir"
     self.slurm_tmpdir.mkdir()
     os.environ["TMPDIR"] = os.fspath(self.slurm_tmpdir)
+    clear_slurm_running_jobs_cache()
   def tearDown(self):
     del self.tmpdir
     self.close()
@@ -124,7 +125,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       f.write("SLURM 0 1234568")
     with JobLock(fn1, outputfiles=[output1, output2], dosqueue=False) as lock:
       self.assertFalse(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": ("SLURM", 0, 1234568), "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
     self.assertTrue(fn1.exists())
     self.assertTrue(fn2.exists())
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
@@ -273,6 +274,31 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       self.assertFalse(lock4)
     with JobLock(self.tmpdir/"lock5.lock") as lock5:
       self.assertTrue(lock5)
+
+  def testCacheSqueue(self):
+    with open(self.tmpdir/"lock.lock", "w") as f:
+      f.write("SLURM 0 1234567")
+    with JobLock(self.tmpdir/"lock.lock") as lock:
+      self.assertFalse(lock)
+
+    dummysqueue = """
+      #!/bin/bash
+      echo '
+           1234567   RUNNING
+      '
+      sed -i s/1234567/1234568/g $0
+    """.lstrip()
+    with open(self.tmpdir/"squeue", "w") as f:
+      f.write(dummysqueue)
+    (self.tmpdir/"squeue").chmod(0o0777)
+    os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
+
+    with JobLock(self.tmpdir/"lock.lock") as lock:
+      self.assertFalse(lock)
+    with JobLock(self.tmpdir/"lock.lock", cachesqueue=True) as lock:
+      self.assertFalse(lock)
+    with JobLock(self.tmpdir/"lock.lock") as lock:
+      self.assertTrue(lock)
 
   def testJobLockAndWait(self):
     with JobLockAndWait(self.tmpdir/"lock1.lock", 0.001, silent=True) as lock1:
