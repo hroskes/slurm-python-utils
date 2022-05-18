@@ -171,7 +171,7 @@ class JobLock(object):
             break
 
   def __enter__(self):
-    self.removed_failed_job = removed_failed_job = False
+    self.removed_failed_job = False
     if self.checkoutputfiles and not self.filename.exists():
       self.__outputsexist = {_: _.exists() for _ in self.outputfiles}
       if all(self.outputsexist.values()):
@@ -215,7 +215,7 @@ class JobLock(object):
               for outputfile in self.outputfiles:
                 rm_missing_ok(outputfile)
               rm_missing_ok(self.filename)
-              removed_failed_job = True
+              self.removed_failed_job = True
               try:
                 self.__open()
               except FileExistsError:
@@ -229,7 +229,7 @@ class JobLock(object):
             for outputfile in self.outputfiles:
               rm_missing_ok(outputfile)
             rm_missing_ok(self.filename)
-            self.removed_failed_job = removed_failed_job = True
+            self.removed_failed_job = True
             try:
               self.__open()
             except FileExistsError:
@@ -249,7 +249,6 @@ class JobLock(object):
     except (IOError, OSError):
       pass
     self.bool = True
-    self.removed_failed_job = removed_failed_job
     return self
 
   def __exit__(self, exc_type, exc, traceback):
