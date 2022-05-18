@@ -47,7 +47,7 @@ def jobinfo():
   return sys.platform, cpuid(), os.getpid()
 
 class JobLock(object):
-  defaultcorruptfiletimeout = None
+  defaultcorruptfiletimeout = datetime.timedelta(hours=24)
 
   def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, prevsteplockfiles=[], corruptfiletimeout=None, mkdir=False, dosqueue=True, cachesqueue=False):
     self.filename = pathlib.Path(filename)
