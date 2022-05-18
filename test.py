@@ -370,6 +370,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with open(self.tmpdir/"lock1.lock", "w"): pass
     with JobLock(self.tmpdir/"lock1.lock", corruptfiletimeout=datetime.timedelta(seconds=1)) as lock:
       self.assertFalse(lock)
+      self.assertIsInstance(lock.debuginfo["oldjobinfo"], ValueError)
     self.assertFalse((self.tmpdir/"lock1.lock_2").exists())
     self.assertTrue((self.tmpdir/"lock1.lock_5").exists())
     self.assertTrue((self.tmpdir/"lock1.lock_10").exists())
