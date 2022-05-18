@@ -77,7 +77,7 @@ class JobLock(object):
   def __reset(self):
     self.fd = self.f = None
     self.bool = False
-    self.__inputsexist = self.__outputsexist = self.__prevsteplockfilesexist = self.__oldjobinfo = None
+    self.__inputsexist = self.__outputsexist = self.__prevsteplockfilesexist = self.__oldjobinfo = self.__iterative_lock = None
 
   @property
   def wouldbevalid(self):
@@ -119,6 +119,14 @@ class JobLock(object):
   @property
   def oldjobinfo(self):
     return self.__oldjobinfo
+
+  @property
+  def iterative_lock(self):
+    return self.__iterative_lock
+  @property
+  def iterative_lock_debuginfo(self):
+    if self.iterative_lock is None: return None
+    return self.iterative_lock.debuginfo
 
   def __open(self):
     self.fd = os.open(self.filename, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -188,6 +196,7 @@ class JobLock(object):
       #job failed at the same time, and one of them could remove
       #the lock created by the other one
       with JobLock(self.iterative_lock_filename, **self.sublockkwargs) as iterative_lock:
+        self.__iterative_lock = iterative_lock
         if not iterative_lock: return self
         try:
           self.__oldjobinfo = self.runningjobinfo(exceptions=True)
@@ -266,6 +275,7 @@ class JobLock(object):
       "prevsteplockfilesexist": self.prevsteplockfilesexist,
       "oldjobinfo": self.oldjobinfo,
       "removed_failed_job": self.removed_failed_job,
+      "iterative_lock_debuginfo": self.iterative_lock_debuginfo,
     }
 
 __knownrunningslurmjobs = set()

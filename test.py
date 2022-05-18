@@ -8,6 +8,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       self.enter_context(contextlib.nullcontext())
     except AttributeError:
       contextlib.ExitStack.__init__(self)
+    self.maxDiff = None
   def setUp(self):
     self.tmpdir = pathlib.Path(self.enter_context(tempfile.TemporaryDirectory()))
     self.bkpenviron = os.environ.copy()
@@ -29,7 +30,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
         self.assertTrue(lock2)
       with JobLock(self.tmpdir/"lock1.lock") as lock3:
         self.assertFalse(lock3)
-        self.assertEqual(lock3.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": jobinfo(), "removed_failed_job": False})
+        self.assertEqual(lock3.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": jobinfo(), "removed_failed_job": False, "iterative_lock_debuginfo": {"inputsexist": None, "iterative_lock_debuginfo": None, "oldjobinfo": None, "outputsexist": None, "prevsteplockfilesexist": None, "removed_failed_job": False}})
 
   def testMultiJobLock(self):
     fn1 = self.tmpdir/"lock1.lock"
@@ -59,19 +60,19 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
 
     with JobLock(fn1, inputfiles=[input1, input2]) as lock:
       self.assertFalse(lock)
-      self.assertEqual(lock.debuginfo, {"inputsexist": {input1: False, input2: False}, "outputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"inputsexist": {input1: False, input2: False}, "outputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False, "iterative_lock_debuginfo": None})
     input1.touch()
     with JobLock(fn1, inputfiles=[input1, input2]) as lock:
       self.assertFalse(lock)
-      self.assertEqual(lock.debuginfo, {"inputsexist": {input1: True, input2: False}, "outputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"inputsexist": {input1: True, input2: False}, "outputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False, "iterative_lock_debuginfo": None})
     with JobLock(fn1, inputfiles=[input1]) as lock:
       self.assertTrue(lock)
-      self.assertEqual(lock.debuginfo, {"inputsexist": {input1: True}, "outputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"inputsexist": {input1: True}, "outputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False, "iterative_lock_debuginfo": None})
 
     input2.touch()
     with JobLock(fn1, inputfiles=[input1, input2]) as lock:
       self.assertTrue(lock)
-      self.assertEqual(lock.debuginfo, {"inputsexist": {input1: True, input2: True}, "outputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"inputsexist": {input1: True, input2: True}, "outputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False, "iterative_lock_debuginfo": None})
 
   def testOutputFiles(self):
     fn1 = self.tmpdir/"lock1.lock"
@@ -84,19 +85,19 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
 
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertTrue(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": {output1: False, output2: False}, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"outputsexist": {output1: False, output2: False}, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False, "iterative_lock_debuginfo": None})
     output1.touch()
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertTrue(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": {output1: True, output2: False}, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"outputsexist": {output1: True, output2: False}, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False, "iterative_lock_debuginfo": None})
     with JobLock(fn1, outputfiles=[output1]) as lock:
       self.assertFalse(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": {output1: True}, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"outputsexist": {output1: True}, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False, "iterative_lock_debuginfo": None})
 
     output2.touch()
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertFalse(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": {output1: True, output2: True}, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"outputsexist": {output1: True, output2: True}, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False, "iterative_lock_debuginfo": None})
     self.assertTrue(fn2.exists()) #should not have cleaned up the iterative locks
 
     dummysqueue = """
@@ -114,7 +115,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       f.write("SLURM 0 1234567")
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertFalse(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": ("SLURM", 0, 1234567), "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": ("SLURM", 0, 1234567), "removed_failed_job": False, "iterative_lock_debuginfo": {"inputsexist": None, "iterative_lock_debuginfo": None, "oldjobinfo": None, "outputsexist": None, "prevsteplockfilesexist": None, "removed_failed_job": True}})
     self.assertTrue(output1.exists())
     self.assertTrue(output2.exists())
     self.assertFalse(fn2.exists()) #should have cleaned up the iterative locks
@@ -125,12 +126,12 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       f.write("SLURM 0 1234568")
     with JobLock(fn1, outputfiles=[output1, output2], dosqueue=False) as lock:
       self.assertFalse(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": None, "removed_failed_job": False, "iterative_lock_debuginfo": {"inputsexist": None, "iterative_lock_debuginfo": None, "oldjobinfo": None, "outputsexist": None, "prevsteplockfilesexist": None, "removed_failed_job": False}})
     self.assertTrue(fn1.exists())
     self.assertTrue(fn2.exists())
     with JobLock(fn1, outputfiles=[output1, output2]) as lock:
       self.assertTrue(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": ("SLURM", 0, 1234568), "removed_failed_job": True})
+      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": ("SLURM", 0, 1234568), "removed_failed_job": True, "iterative_lock_debuginfo": {"inputsexist": None, "iterative_lock_debuginfo": None, "oldjobinfo": None, "outputsexist": None, "prevsteplockfilesexist": None, "removed_failed_job": True}})
     self.assertFalse(output1.exists())
     self.assertFalse(output2.exists())
 
@@ -140,13 +141,13 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
 
     with JobLock(fn2, prevsteplockfiles=[fn1]) as lock:
       self.assertTrue(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": {fn1: False}, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": {fn1: False}, "oldjobinfo": None, "removed_failed_job": False, "iterative_lock_debuginfo": None})
 
     with JobLock(fn1) as lock:
       self.assertTrue(lock)
       with JobLock(fn2, prevsteplockfiles=[fn1]) as lock2:
         self.assertFalse(lock2)
-        self.assertEqual(lock2.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": {fn1: True}, "oldjobinfo": None, "removed_failed_job": False})
+        self.assertEqual(lock2.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": {fn1: True}, "oldjobinfo": None, "removed_failed_job": False, "iterative_lock_debuginfo": None})
 
     dummysqueue = """
       #!/bin/bash
@@ -164,14 +165,14 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
 
     with JobLock(fn2, prevsteplockfiles=[fn1]) as lock:
       self.assertFalse(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": {fn1: True}, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": {fn1: True}, "oldjobinfo": None, "removed_failed_job": False, "iterative_lock_debuginfo": None})
 
     with open(fn1, "w") as f:
       f.write("SLURM 0 1234568")
 
     with JobLock(fn2, prevsteplockfiles=[fn1]) as lock:
       self.assertTrue(lock)
-      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": {fn1: False}, "oldjobinfo": None, "removed_failed_job": False})
+      self.assertEqual(lock.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": {fn1: False}, "oldjobinfo": None, "removed_failed_job": False, "iterative_lock_debuginfo": None})
 
   def testRunningJobs(self):
     jobtype, cpuid, jobid = jobinfo()
