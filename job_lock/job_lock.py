@@ -391,55 +391,57 @@ class JobLockAndWait(JobLock):
         if not self.__silent: print(self.__printmessage)
       time.sleep(self.delay)
 
-def clean_up_old_job_locks(folder, glob="*.lock_*", howold=datetime.timedelta(days=7), dryrun=False, silent=False):
-  folder = pathlib.Path(folder)
-  all_locks = sorted(folder.rglob(glob))
-  all_first_order_locks = sorted({filename.with_suffix(filename.suffix.split("_")[0]) for filename in all_locks})
-  locks_dict = {first_order_lock: {lock for lock in all_locks if lock.with_suffix(lock.suffix.split("_")[0]) == first_order_lock} for first_order_lock in all_first_order_locks}
+def clean_up_old_job_locks(*folders, glob="*.lock_*", howold=datetime.timedelta(days=7), dryrun=False, silent=False):
+  for folder in folders:
+    folder = pathlib.Path(folder)
+    all_locks = sorted(folder.rglob(glob))
+    all_first_order_locks = sorted({filename.with_suffix(filename.suffix.split("_")[0]) for filename in all_locks})
+    locks_dict = {first_order_lock: {lock for lock in all_locks if lock.with_suffix(lock.suffix.split("_")[0]) == first_order_lock} for first_order_lock in all_first_order_locks}
 
-  remove = []
-  dontremove = []
-  for first_order_lock_file, lock_files in sorted(locks_dict.items()):
-    try:
-      modified = max(datetime.datetime.fromtimestamp(file.stat().st_mtime) for file in lock_files)
-    except FileNotFoundError:
-      dontremove.append(first_order_lock_file)
-      continue
-    now = datetime.datetime.now()
-    if now - modified < howold:
-      dontremove.append(first_order_lock_file)
+    remove = []
+    dontremove = []
+    for first_order_lock_file, lock_files in sorted(locks_dict.items()):
+      try:
+        modified = max(datetime.datetime.fromtimestamp(file.stat().st_mtime) for file in lock_files)
+      except FileNotFoundError:
+        dontremove.append(first_order_lock_file)
+        continue
+      now = datetime.datetime.now()
+      if now - modified < howold:
+        dontremove.append(first_order_lock_file)
+      else:
+        remove.append(first_order_lock_file)
+
+    if dryrun:
+      verb = "Would remove"
+      dontverb = "Would not remove"
     else:
-      remove.append(first_order_lock_file)
+      verb = "Removing"
+      dontverb = "Keeping"
 
-  if dryrun:
-    verb = "Would remove"
-    dontverb = "Would not remove"
-  else:
-    verb = "Removing"
-    dontverb = "Keeping"
+    if silent:
+      def doprint(*args, **kwargs): pass
+    else:
+      doprint = print
 
-  if silent:
-    def doprint(*args, **kwargs): pass
-  else:
-    doprint = print
-
-  doprint(f"{verb} the following locks (and their iterations):")
-  for _ in remove:
-    doprint(_)
-    if not dryrun:
-      with JobLock(_, corruptfiletimeout=howold): pass
-  doprint(f"{dontverb} the following locks (and their iterations):")
-  for _ in dontremove: doprint(_)
+    doprint(f"{verb} the following locks (and their iterations):")
+    for _ in remove:
+      doprint(_)
+      if not dryrun:
+        with JobLock(_, corruptfiletimeout=howold): pass
+    doprint(f"{dontverb} the following locks (and their iterations):")
+    for _ in dontremove: doprint(_)
 
 def clean_up_old_job_locks_argparse(args=None):
   p = argparse.ArgumentParser()
-  p.add_argument("folder", type=pathlib.Path)
+  p.add_argument("folders", type=pathlib.Path, nargs="+", metavar="folder")
   p.add_argument("--glob", default="*.lock_*")
-  p.add_argument("--hours-old", type=lambda x: datetime.timedelta(hours=float(x)), default=7*24, dest="howold")
+  p.add_argument("--hours-old", type=lambda x: datetime.timedelta(hours=float(x)), default=datetime.timedelta(days=7), dest="howold")
   p.add_argument("--dry-run", dest="dryrun", action="store_true")
   p.add_argument("--silent", action="store_true")
   args = p.parse_args(args=args)
-  return clean_up_old_job_locks(**args.__dict__)
+  folders = args.__dict__.pop("folders")
+  return clean_up_old_job_locks(*folders, **args.__dict__)
 
 class MultiJobLock(contextlib.ExitStack):
   """
