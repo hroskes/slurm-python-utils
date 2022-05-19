@@ -1,4 +1,4 @@
-import contextlib, datetime, itertools, os, pathlib, random, re, subprocess, sys, time, uuid
+import argparse, contextlib, datetime, itertools, os, pathlib, random, re, subprocess, sys, time, uuid
 if sys.platform != "cygwin":
   import psutil
 
@@ -430,6 +430,16 @@ def clean_up_old_job_locks(folder, glob="*.lock_*", howold=datetime.timedelta(da
       with JobLock(_, corruptfiletimeout=howold): pass
   doprint(f"{dontverb} the following locks (and their iterations):")
   for _ in dontremove: doprint(_)
+
+def clean_up_old_job_locks_argparse(args=None):
+  p = argparse.ArgumentParser()
+  p.add_argument("folder", type=pathlib.Path)
+  p.add_argument("--glob", default="*.lock_*")
+  p.add_argument("--hours-old", type=lambda x: datetime.timedelta(hours=float(x)), default=7*24, dest="howold")
+  p.add_argument("--dry-run", dest="dryrun", action="store_true")
+  p.add_argument("--silent", action="store_true")
+  args = p.parse_args(args=args)
+  return clean_up_old_job_locks(**args.__dict__)
 
 class MultiJobLock(contextlib.ExitStack):
   """

@@ -14,6 +14,11 @@ setuptools.setup(
     "methodtools",
     "psutil;sys_platform!='cygwin'",
   ],
+  entry_points = {
+    "console_scripts": [
+      "clean_up_old_job_locks=job_lock.job_lock:clean_up_old_job_locks_argparse",
+    ],
+  },
   long_description = long_description,
   long_description_content_type = 'text/markdown',
 )
