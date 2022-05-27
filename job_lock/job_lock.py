@@ -49,7 +49,7 @@ def jobinfo():
 class JobLock(object):
   defaultcorruptfiletimeout = datetime.timedelta(hours=24)
 
-  def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, prevsteplockfiles=[], corruptfiletimeout=None, mkdir=False, dosqueue=True, cachesqueue=False):
+  def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, prevsteplockfiles=[], corruptfiletimeout=None, mkdir=False, dosqueue=True, cachesqueue=True):
     self.filename = pathlib.Path(filename)
     self.outputfiles = [pathlib.Path(_) for _ in outputfiles]
     self.inputfiles = [pathlib.Path(_) for _ in inputfiles]

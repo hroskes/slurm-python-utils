@@ -296,9 +296,9 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
 
     with JobLock(self.tmpdir/"lock.lock") as lock:
       self.assertFalse(lock)
-    with JobLock(self.tmpdir/"lock.lock", cachesqueue=True) as lock:
-      self.assertFalse(lock)
     with JobLock(self.tmpdir/"lock.lock") as lock:
+      self.assertFalse(lock)
+    with JobLock(self.tmpdir/"lock.lock", cachesqueue=False) as lock:
       self.assertTrue(lock)
 
   def testJobLockAndWait(self):
@@ -323,7 +323,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     (self.tmpdir/"squeue").chmod(0o0777)
     os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
 
-    with JobLockAndWait(self.tmpdir/"lock2.lock", 0.001, maxiterations=10, silent=True) as lock2:
+    with JobLockAndWait(self.tmpdir/"lock2.lock", 0.001, maxiterations=10, silent=True, cachesqueue=False) as lock2:
       self.assertEqual(lock2.niterations, 2)
 
     inputfile = self.tmpdir/"input.txt"
