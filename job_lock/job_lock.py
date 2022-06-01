@@ -300,21 +300,28 @@ def clear_slurm_running_jobs_cache():
   __knownrunningslurmjobs.clear()
 
 def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True, squeueoutput=None):
+  print("hineni 0")
   if squeueoutput is None:
+    print ("hineni 0.5")
     squeueoutput = __squeueoutput
+    print(squeueoutput)
   if jobtype == "SLURM":
+    print("hineni 1")
     if cachesqueue and jobid in __knownrunningslurmjobs: return False #assume job is still running
     if not dosqueue and squeueoutput is None: return None #don't know if the job finished
+    print("hineni 2")
     try:
       if squeueoutput is not None:
         output = squeueoutput
         freshsqueue = False
       else:
-        output = subprocess.check_output(["squeue", "--job", str(jobid), "--format", "jobid,state", "--noheader"], stderr=subprocess.STDOUT)
+        output = subprocess.check_output(["squeue", "--job", str(jobid), "--Format", "jobid,state", "--noheader"], stderr=subprocess.STDOUT)
         freshsqueue = True
 
+      print("hineni 3")
       maxseenjobid = -float("inf")
       for line in output.split(b"\n"):
+        print("hineni 4")
         line = line.strip()
         if not line: continue
         try:
@@ -331,8 +338,11 @@ def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True, squeu
           else:
             __knownrunningslurmjobs.add(jobid)
             return False #job is still running
+      print("hineni 3")
       if not freshsqueue and jobid > maxseenjobid:
+        print("hineni 4")
         return None #don't know if the job was started after squeue was run
+      print("hineni 5")
       return True #job is finished
     except FileNotFoundError:  #no squeue
       return None  #we don't know if the job finished
