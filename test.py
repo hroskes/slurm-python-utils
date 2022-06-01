@@ -1,5 +1,5 @@
 import contextlib, datetime, multiprocessing, os, pathlib, subprocess, tempfile, time, unittest
-from job_lock import clean_up_old_job_locks, clear_slurm_running_jobs_cache, JobLock, JobLockAndWait, jobinfo, MultiJobLock, slurm_clean_up_temp_dir, slurm_rsync_input, slurm_rsync_output
+from job_lock import clean_up_old_job_locks, clear_slurm_running_jobs_cache, JobLock, JobLockAndWait, jobinfo, MultiJobLock, setsqueueoutput, slurm_clean_up_temp_dir, slurm_rsync_input, slurm_rsync_output
 
 class TestJobLock(unittest.TestCase, contextlib.ExitStack):
   def __init__(self, *args, **kwargs):
@@ -16,6 +16,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     self.slurm_tmpdir.mkdir()
     os.environ["TMPDIR"] = os.fspath(self.slurm_tmpdir)
     clear_slurm_running_jobs_cache()
+    setsqueueoutput()
   def tearDown(self):
     del self.tmpdir
     self.close()
@@ -482,4 +483,39 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
 
     with slurm_rsync_output(outputfile, silentrsync=True, ok_if_not_created=True):
       pass
+
+  def testsqueueoutput(self):
+    squeueoutput = """
+           1234567   RUNNING
+           1234568   PENDING
+    """.lstrip()
+    with open(self.tmpdir/"squeueoutput", "w") as f:
+      f.write(squeueoutput)
+
+    setsqueueoutput(filename=self.tmpdir/"squeueoutput")
+    with open(self.tmpdir/"lock1.lock", "w") as f:
+      f.write("SLURM 0 1234567")
+    with open(self.tmpdir/"lock2.lock", "w") as f:
+      f.write("1234567")
+    with open(self.tmpdir/"lock3.lock", "w") as f:
+      f.write("SLURM 0 12345678")
+    with open(self.tmpdir/"lock4.lock", "w") as f:
+      f.write("SLURM 0 1234566")
+    with open(self.tmpdir/"lock5.lock", "w") as f:
+      f.write("SLURM 0 1234568")
+    with open(self.tmpdir/"lock6.lock", "w") as f:
+      f.write("1234568")
+
+    with JobLock(self.tmpdir/"lock1.lock") as lock1:
+      self.assertFalse(lock1)
+    with JobLock(self.tmpdir/"lock2.lock") as lock2:
+      self.assertFalse(lock2)
+    with JobLock(self.tmpdir/"lock3.lock") as lock3:
+      self.assertFalse(lock3)
+    with JobLock(self.tmpdir/"lock4.lock") as lock4:
+      self.assertTrue(lock4)
+    with JobLock(self.tmpdir/"lock5.lock") as lock5:
+      self.assertFalse(lock5)
+    with JobLock(self.tmpdir/"lock6.lock") as lock6:
+      self.assertFalse(lock6)
 

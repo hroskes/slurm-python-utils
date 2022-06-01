@@ -277,17 +277,43 @@ class JobLock(object):
       "iterative_lock_debuginfo": self.iterative_lock_debuginfo,
     }
 
+  @classmethod
+  def setdefaultcorruptfiletimeout(cls, timeout):
+    cls.defaultcorruptfiletimeout = timeout
+
 __knownrunningslurmjobs = set()
+__squeueoutput = None
+
+def setsqueueoutput(*, output=None, filename=None):
+  global __squeueoutput
+  if filename is not None and output is not None:
+    raise TypeError("Provided both output and filename")
+  if output is not None:
+    __squeueoutput = output
+  elif filename is not None:
+    with open(filename, "rb") as f:
+      __squeueoutput = f.read()
+  else:
+    __squeueoutput = None
 
 def clear_slurm_running_jobs_cache():
   __knownrunningslurmjobs.clear()
 
-def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True):
+def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True, squeueoutput=None):
+  if squeueoutput is None:
+    squeueoutput = __squeueoutput
   if jobtype == "SLURM":
     if cachesqueue and jobid in __knownrunningslurmjobs: return False #assume job is still running
-    if not dosqueue: return None #don't know if the job finished
+    if not dosqueue and squeueoutput is None: return None #don't know if the job finished
     try:
-      output = subprocess.check_output(["squeue", "--job", str(jobid), "--format", "jobid,state", "--noheader"], stderr=subprocess.STDOUT)
+      if squeueoutput is not None:
+        output = squeueoutput
+        freshsqueue = False
+      else:
+        output = subprocess.check_output(["squeue", "--job", str(jobid), "--format", "jobid,state", "--noheader"], stderr=subprocess.STDOUT)
+        freshsqueue = True
+
+      maxseenjobid = -float("inf")
       for line in output.split(b"\n"):
         line = line.strip()
         if not line: continue
@@ -296,14 +322,17 @@ def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True):
         except ValueError:
           return None #don't know if the job finished, probably a temporary glitch in squeue
         runningjobid = int(runningjobid)
+        maxseenjobid = max(runningjobid, maxseenjobid)
         if runningjobid == jobid:
           state = state.decode("ascii")
-          if state in ("PENDING", "PD"):
+          if state in ("PENDING", "PD") and freshsqueue:
             #this can happen if the job was cancelled due to node failure and was automatically resubmitted
             return True #job is not currently running
           else:
             __knownrunningslurmjobs.add(jobid)
             return False #job is still running
+      if not freshsqueue and jobid > maxseenjobid:
+        return None #don't know if the job was started after squeue was run
       return True #job is finished
     except FileNotFoundError:  #no squeue
       return None  #we don't know if the job finished
