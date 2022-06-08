@@ -302,7 +302,6 @@ def clear_slurm_running_jobs_cache():
 def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True, squeueoutput=None):
   if squeueoutput is None:
     squeueoutput = __squeueoutput
-    print(squeueoutput)
   if jobtype == "SLURM":
     if cachesqueue and jobid in __knownrunningslurmjobs: return False #assume job is still running
     if not dosqueue and squeueoutput is None: return None #don't know if the job finished
