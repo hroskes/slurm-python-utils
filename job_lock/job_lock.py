@@ -49,7 +49,7 @@ def jobinfo():
 class JobLock(object):
   defaultcorruptfiletimeout = datetime.timedelta(hours=24)
 
-  def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, prevsteplockfiles=[], corruptfiletimeout=None, mkdir=False, dosqueue=True, cachesqueue=True):
+  def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, prevsteplockfiles=[], corruptfiletimeout=None, mkdir=False, dosqueue=True, cachesqueue=True, suppressfileopenfailure=False):
     self.filename = pathlib.Path(filename)
     self.outputfiles = [pathlib.Path(_) for _ in outputfiles]
     self.inputfiles = [pathlib.Path(_) for _ in inputfiles]
@@ -64,6 +64,7 @@ class JobLock(object):
     self.mkdir = mkdir
     self.dosqueue = dosqueue
     self.cachesqueue = cachesqueue
+    self.suppressfileopenfailure = suppressfileopenfailure
     self.sublockkwargs = {
       "checkoutputfiles": checkoutputfiles,
       "checkinputfiles": checkinputfiles,
@@ -71,6 +72,7 @@ class JobLock(object):
       "dosqueue": dosqueue,
       "cachesqueue": cachesqueue,
       "corruptfiletimeout": corruptfiletimeout,
+      "suppressfileopenfailure": True,
     }
     self.__reset()
 
@@ -236,6 +238,11 @@ class JobLock(object):
               return self
           else:
             return self
+    except FileNotFoundError:
+      if self.suppressfileopenfailure and self.filename.parent.exists():
+        return self
+      else:
+        raise
 
     self.f = os.fdopen(self.fd, 'w')
 
