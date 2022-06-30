@@ -290,6 +290,7 @@ class JobLock(object):
 
 __knownrunningslurmjobs = set()
 __squeueoutput = None
+__squeueerror = False
 
 def setsqueueoutput(*, output=None, filename=None):
   global __squeueoutput
@@ -307,6 +308,9 @@ def clear_slurm_running_jobs_cache():
   __knownrunningslurmjobs.clear()
 
 def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True, squeueoutput=None):
+  global __squeueerror
+  if __squeueerror: dosqueue = False
+
   if squeueoutput is None:
     squeueoutput = __squeueoutput
   if jobtype == "SLURM":
@@ -347,8 +351,10 @@ def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True, squeu
       if b"slurm_load_jobs error: Invalid job id specified" in e.output:
         return True #job is finished
       if b"slurm_load_jobs error: Unable to contact slurm controller (connect failure)" in e.output:
+        __squeueerror = True
         return None #we don't know if the job finished
       if b"slurm_load_jobs error: Socket timed out on send/recv operation" in e.output:
+        __squeueerror = True
         return None #we don't know if the job finished
       print(e.output)
       raise
