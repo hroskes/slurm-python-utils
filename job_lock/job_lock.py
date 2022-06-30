@@ -346,6 +346,10 @@ def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True, squeu
     except subprocess.CalledProcessError as e:
       if b"slurm_load_jobs error: Invalid job id specified" in e.output:
         return True #job is finished
+      if b"slurm_load_jobs error: Unable to contact slurm controller (connect failure)" in e.output:
+        return None #we don't know if the job finished
+      if b"slurm_load_jobs error: Socket timed out on send/recv operation" in e.output:
+        return None #we don't know if the job finished
       print(e.output)
       raise
   elif jobtype == "CONDOR":
