@@ -18,7 +18,7 @@ def CONDOR_JOBINFO():
   try:
     return os.environ["CONDOR_CLUSTERID"], os.environ["CONDOR_PROCID"]
   except KeyError:
-    raise OSError("Please put 'environment = CONDOR_cLUSTERID=$(ClusterId) CONDOR_PROCID=$(ProcId)' in your condor submission script")
+    raise OSError("""Please put 'environment = "CONDOR_CLUSTERID=$(ClusterId) CONDOR_PROCID=$(ProcId)"' in your condor submission script""")
 
 def cpuid():
   node = uuid.getnode()
