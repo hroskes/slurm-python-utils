@@ -217,28 +217,16 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with open(self.tmpdir/"lock1.lock", "w") as f:
       f.write("SLURM 0 1234567")
     with open(self.tmpdir/"lock2.lock", "w") as f:
-      f.write("1234567")
-    with open(self.tmpdir/"lock3.lock", "w") as f:
       f.write("SLURM 0 12345678")
-    with open(self.tmpdir/"lock4.lock", "w") as f:
-      f.write("12345678")
-    with open(self.tmpdir/"lock5.lock", "w") as f:
+    with open(self.tmpdir/"lock3.lock", "w") as f:
       f.write("SLURM 0 1234568")
-    with open(self.tmpdir/"lock6.lock", "w") as f:
-      f.write("1234568")
 
     with JobLock(self.tmpdir/"lock1.lock") as lock1:
       self.assertFalse(lock1)
     with JobLock(self.tmpdir/"lock2.lock") as lock2:
-      self.assertFalse(lock2)
+      self.assertTrue(lock2)
     with JobLock(self.tmpdir/"lock3.lock") as lock3:
       self.assertTrue(lock3)
-    with JobLock(self.tmpdir/"lock4.lock") as lock4:
-      self.assertTrue(lock4)
-    with JobLock(self.tmpdir/"lock5.lock") as lock5:
-      self.assertTrue(lock5)
-    with JobLock(self.tmpdir/"lock6.lock") as lock6:
-      self.assertTrue(lock6)
 
   def testcondor(self):
     dummycondor_q = """
