@@ -1,5 +1,5 @@
 import contextlib, datetime, multiprocessing, os, pathlib, subprocess, tempfile, time, unittest
-from job_lock import clean_up_old_job_locks, clear_slurm_running_jobs_cache, JobLock, JobLockAndWait, jobinfo, MultiJobLock, setsqueueoutput, slurm_clean_up_temp_dir, slurm_rsync_input, slurm_rsync_output
+from job_lock import clean_up_old_job_locks, clear_running_jobs_cache, JobLock, JobLockAndWait, jobinfo, MultiJobLock, setsqueueoutput, slurm_clean_up_temp_dir, slurm_rsync_input, slurm_rsync_output
 
 class TestJobLock(unittest.TestCase, contextlib.ExitStack):
   def __init__(self, *args, **kwargs):
@@ -15,7 +15,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     self.slurm_tmpdir = self.tmpdir/"slurm_tmpdir"
     self.slurm_tmpdir.mkdir()
     os.environ["TMPDIR"] = os.fspath(self.slurm_tmpdir)
-    clear_slurm_running_jobs_cache()
+    clear_running_jobs_cache()
     setsqueueoutput()
   def tearDown(self):
     del self.tmpdir

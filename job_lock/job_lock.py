@@ -285,6 +285,10 @@ __knownrunningslurmjobs = set()
 __squeueoutput = None
 __squeueerror = False
 
+__knownrunningcondorjobs = set()
+__condorqerror = False
+__condorqoutput = None
+
 def setsqueueoutput(*, output=None, filename=None):
   global __squeueoutput
   if filename is not None and output is not None:
@@ -297,16 +301,28 @@ def setsqueueoutput(*, output=None, filename=None):
   else:
     __squeueoutput = None
 
-def clear_slurm_running_jobs_cache():
+def setcondorqoutput(*, output=None, filename=None):
+  global __condorqoutput
+  if filename is not None and output is not None:
+    raise TypeError("Provided both output and filename")
+  if output is not None:
+    __condorqoutput = output
+  elif filename is not None:
+    with open(filename, "rb") as f:
+      __condorqoutput = f.read()
+  else:
+    __condorqoutput = None
+
+def clear_running_jobs_cache():
   __knownrunningslurmjobs.clear()
+  __knownrunningcondorjobs.clear()
 
-def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True, squeueoutput=None):
-  global __squeueerror
-  if __squeueerror: dosqueue = False
-
-  if squeueoutput is None:
-    squeueoutput = __squeueoutput
+def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True, squeueoutput=None, condorqoutput=None):
   if jobtype == "SLURM":
+    global __squeueerror
+    if __squeueerror: dosqueue = False
+    if squeueoutput is None: squeueoutput = __squeueoutput
+
     if cachesqueue and jobid in __knownrunningslurmjobs: return False #assume job is still running
     if not dosqueue and squeueoutput is None: return None #don't know if the job finished
     try:
@@ -352,9 +368,21 @@ def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True, squeu
       print(e.output)
       raise
   elif jobtype == "CONDOR":
-    if not dosqueue: return None #don't know if the job finished
+    global __condorqerror
+    if __condorqerror: docondorq = False
+    if condorqoutput is None: condorqoutput = __condorqoutput
+
+    if cachesqueue and jobid in __knownrunningslurmjobs: return False #assume job is still running
+    if not dosqueue and condorqoutput is None: return None #don't know if the job finished
     try:
-      output = subprocess.check_output(["condor_q", "-nobatch", "-run"], stderr=subprocess.STDOUT)
+      if condorqoutput is not None:
+        output = condorqoutput
+        freshcondorq = False
+      else:
+        output = subprocess.check_output(["condor_q", "-nobatch", "-run"], stderr=subprocess.STDOUT)
+        freshcondorq = True
+
+      maxseenjobid = -float("inf")
       for line in output.split(b"\n"):
         line = line.strip()
         if not line: continue
@@ -366,11 +394,17 @@ def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True, squeu
         except ValueError:
           return None #don't know if the job finished, probably a temporary glitch in squeue
         if runningclusterid == cpuid and runningprocid == jobid:
+          __knownrunningcondorjobs.add(jobid)
           return False #job is still running
+      if not freshcondorq and jobid > maxseenjobid:
+        return None #don't know if the job was started after condor_q was run
       return True #job is finished
-    except FileNotFoundError:  #no squeue
+    except FileNotFoundError:  #no condor_q
       return None  #we don't know if the job finished
     except subprocess.CalledProcessError as e:
+      if b"Can't find address for schedd" in e.output:
+        __condorqerror = True
+        return None #we don't know if the job finished
       print(e.output)
       raise
   else:
