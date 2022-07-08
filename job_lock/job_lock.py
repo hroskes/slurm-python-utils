@@ -317,7 +317,7 @@ def clear_running_jobs_cache():
   __knownrunningslurmjobs.clear()
   __knownrunningcondorjobs.clear()
 
-def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True, squeueoutput=None, condorqoutput=None):
+def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, docondorq=True, cachesqueue=True, cachecondorqueue=True, squeueoutput=None, condorqoutput=None):
   if jobtype == "SLURM":
     global __squeueerror
     if __squeueerror: dosqueue = False
@@ -372,8 +372,8 @@ def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True, squeu
     if __condorqerror: docondorq = False
     if condorqoutput is None: condorqoutput = __condorqoutput
 
-    if cachesqueue and jobid in __knownrunningslurmjobs: return False #assume job is still running
-    if not dosqueue and condorqoutput is None: return None #don't know if the job finished
+    if cachecondorq and (cpuid, jobid) in __knownrunningcondorjobs: return False #assume job is still running
+    if not docondorq and condorqoutput is None: return None #don't know if the job finished
     try:
       if condorqoutput is not None:
         output = condorqoutput
@@ -394,7 +394,7 @@ def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, cachesqueue=True, squeu
         except ValueError:
           return None #don't know if the job finished, probably a temporary glitch in squeue
         if runningclusterid == cpuid and runningprocid == jobid:
-          __knownrunningcondorjobs.add(jobid)
+          __knownrunningcondorjobs.add((cpuid, jobid))
           return False #job is still running
       if not freshcondorq and jobid > maxseenjobid:
         return None #don't know if the job was started after condor_q was run
