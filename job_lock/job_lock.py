@@ -317,7 +317,7 @@ def clear_running_jobs_cache():
   __knownrunningslurmjobs.clear()
   __knownrunningcondorjobs.clear()
 
-def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, docondorq=True, cachesqueue=True, cachecondorqueue=True, squeueoutput=None, condorqoutput=None):
+def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, docondorq=True, cachesqueue=True, cachecondorq=True, squeueoutput=None, condorqoutput=None):
   if jobtype == "SLURM":
     global __squeueerror
     if __squeueerror: dosqueue = False
