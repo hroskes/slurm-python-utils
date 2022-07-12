@@ -550,9 +550,31 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       fi
       exit 1
     """.lstrip()
+
+    badcondorq = """
+      #!/bin/bash
+      echo "Can't find address for schedd"
+      exit 1
+    """.lstrip()
+    goodcondorq = """
+      #!/bin/bash
+      echo "
+        -- Schedd: my schedd
+         ID      OWNER            SUBMITTED     RUN_TIME ST PRI SIZE CMD
+         1234567.1
+         1234568.1
+      "
+    """.lstrip()
+    reallybadcondorq = """
+      #!/bin/bash
+      exit 1
+    """.lstrip()
+
     with open(self.tmpdir/"squeue", "w") as f:
       f.write(dummysqueue)
     (self.tmpdir/"squeue").chmod(0o0777)
+    with open(self.tmpdir/"condor_q", "w") as f: f.write(goodcondorq)
+    (self.tmpdir/"condor_q").chmod(0o0777)
     os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
 
     with open(self.tmpdir/"lock1.lock", "w") as f:
@@ -562,37 +584,61 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with open(self.tmpdir/"lock3.lock", "w") as f:
       f.write("SLURM 0 1234567")
     with open(self.tmpdir/"lock4.lock", "w") as f:
-      f.write("SLURM 0 1234567")
+      f.write("CONDOR 1234567 0")
     with open(self.tmpdir/"lock5.lock", "w") as f:
-      f.write("SLURM 0 1234569")
+      f.write("CONDOR 1234567 0")
     with open(self.tmpdir/"lock6.lock", "w") as f:
-      f.write("SLURM 0 1234567")
+      f.write("CONDOR 1234568 0")
     with open(self.tmpdir/"lock7.lock", "w") as f:
-      f.write("SLURM 0 1234570")
+      f.write("CONDOR 1234567 0")
     with open(self.tmpdir/"lock8.lock", "w") as f:
       f.write("SLURM 0 1234567")
+    with open(self.tmpdir/"lock9.lock", "w") as f:
+      f.write("SLURM 0 1234569")
+    with open(self.tmpdir/"lock10.lock", "w") as f:
+      f.write("SLURM 0 1234567")
+    with open(self.tmpdir/"lock11.lock", "w") as f:
+      f.write("SLURM 0 1234570")
+    with open(self.tmpdir/"lock12.lock", "w") as f:
+      f.write("SLURM 0 1234567")
 
-    with JobLock(self.tmpdir/"lock1.lock") as lock1:
-      self.assertTrue(lock1)
-    with JobLock(self.tmpdir/"lock2.lock") as lock2:
-      self.assertFalse(lock2)
-    with JobLock(self.tmpdir/"lock3.lock") as lock3:
+    with JobLock(self.tmpdir/"lock1.lock") as lock:
+      self.assertTrue(lock)
+    with JobLock(self.tmpdir/"lock2.lock") as lock:
+      self.assertFalse(lock)
+    with JobLock(self.tmpdir/"lock3.lock") as lock:
       #won't try to run squeue anymore because lock2 gave an unknown error
-      self.assertFalse(lock3)
+      self.assertFalse(lock)
+
+    with open(self.tmpdir/"condor_q", "w") as f: f.write(reallybadcondorq)
+    with self.assertRaises(subprocess.CalledProcessError):
+      with JobLock(self.tmpdir/"lock4.lock") as lock:
+        pass
+    with open(self.tmpdir/"condor_q", "w") as f: f.write(goodcondorq)
+    with JobLock(self.tmpdir/"lock5.lock") as lock:
+      self.assertTrue(lock)
+    with open(self.tmpdir/"condor_q", "w") as f: f.write(badcondorq)
+    with JobLock(self.tmpdir/"lock6.lock") as lock:
+      self.assertFalse(lock)
+    with open(self.tmpdir/"condor_q", "w") as f: f.write(goodcondorq)
+    with JobLock(self.tmpdir/"lock7.lock") as lock:
+      self.assertFalse(lock)
+
     clear_running_jobs_cache()
-    with JobLock(self.tmpdir/"lock4.lock") as lock4:
+
+    with JobLock(self.tmpdir/"lock8.lock") as lock:
       #will now try again because the cache is cleared
-      self.assertTrue(lock4)
-    with JobLock(self.tmpdir/"lock5.lock") as lock5:
-      self.assertFalse(lock5)
-    with JobLock(self.tmpdir/"lock6.lock") as lock6:
-      self.assertFalse(lock6)
+      self.assertTrue(lock)
+    with JobLock(self.tmpdir/"lock9.lock") as lock:
+      self.assertFalse(lock)
+    with JobLock(self.tmpdir/"lock10.lock") as lock:
+      self.assertFalse(lock)
     clear_running_jobs_cache()
     with self.assertRaises(subprocess.CalledProcessError):
-      with JobLock(self.tmpdir/"lock7.lock") as lock7:
-        self.assertFalse(lock7)
-    with JobLock(self.tmpdir/"lock8.lock") as lock8:
-      self.assertTrue(lock8)
+      with JobLock(self.tmpdir/"lock11.lock") as lock:
+        pass
+    with JobLock(self.tmpdir/"lock12.lock") as lock:
+      self.assertTrue(lock)
 
 def main():
   parser = argparse.ArgumentParser()
