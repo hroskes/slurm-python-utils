@@ -1,4 +1,4 @@
-import argparse, contextlib, datetime, itertools, os, pathlib, random, re, subprocess, sys, time, uuid
+import abc, argparse, contextlib, datetime, itertools, os, pathlib, random, re, subprocess, sys, time, uuid
 if sys.platform != "cygwin":
   import psutil
 
@@ -10,15 +10,6 @@ def rm_missing_ok(path):
       return path.unlink()
     except FileNotFoundError:
       pass
-
-def SLURM_JOBID():
-  return os.environ.get("SLURM_JOBID", None)
-def CONDOR_JOBINFO():
-  if "_CONDOR_SCRATCH_DIR" not in os.environ: return None
-  try:
-    return os.environ["CONDOR_CLUSTERID"], os.environ["CONDOR_PROCID"]
-  except KeyError:
-    raise OSError("""Please put 'environment = "CONDOR_CLUSTERID=$(ClusterId) CONDOR_PROCID=$(ProcId)"' in your condor submission script""")
 
 def cpuid():
   node = uuid.getnode()
@@ -37,13 +28,183 @@ def cpuid():
 
   raise ValueError("Couldn't find a cpuid using any of the methods we know about")
 
+class BatchSubmissionSystem(abc.ABC):
+  def __init__(self):
+    self.__knownrunningjobs = set()
+    self.__joblistoutput = None
+    self.__joblisterror = False
+
+  class WrongBatchSystemError(Exception): pass
+  class JobListCommandError(Exception): pass
+  class InvalidJobListOutputError(Exception): pass
+
+  @abc.abstractmethod
+  def jobinfo(self): pass
+  @abc.abstractmethod
+  def joblistcommand(self, cpuid, jobid): pass
+  @abc.abstractmethod
+  def jobtype(self): pass
+  @abc.abstractmethod
+  def runningjobsfromoutput(self, output): pass
+  @abc.abstractmethod
+  def processjoblistcommanderror(self, calledprocesserror): pass
+
+  def clearrunningjobscache(self):
+    self.__knownrunningjobs.clear()
+
+  def setjoblistoutput(self, *, output=None, filename=None):
+    if filename is not None and output is not None:
+      raise TypeError("Provided both output and filename")
+    elif filename is not None:
+      with open(filename, "rb") as f:
+        self.setjoblistoutput(output=f.read())
+    else:
+      self.__joblistoutput = output
+
+  def jobfinished(self, jobtype, cpuid, jobid, *, dojoblist=True, cachejoblist=True):
+    if jobtype != self.jobtype: raise self.WrongBatchSystemError()
+    if self.__joblisterror: dojoblist = False
+    joblistoutput = self.__joblistoutput
+
+    if cachejoblist and (cpuid, jobid) in self.__knownrunningjobs: return False #assume job is still running
+    if not dojoblist and joblistoutput is None: return None #don't know if the job finished
+
+    if joblistoutput is not None:
+      output = joblistoutput
+      freshjoblist = False
+    else:
+      try:
+        output = subprocess.check_output(self.joblistcommand(cpuid, jobid))
+      except FileNotFoundError: #command doesn't exist on the batch machines
+        return None #we don't know if the job finished
+      except subprocess.CalledProcessError as e:
+        try:
+          return self.processjoblistcommanderror(e)
+        except self.JobListCommandError:
+          self.__joblisterror = True
+          return None #we don't know if the job finished
+        except subprocess.CalledProcessError:
+          print(e.output)
+          raise
+      freshjoblist = True
+
+    try:
+      runningjobs, pendingjobs = self.runningjobsfromoutput(output)
+    except self.InvalidJobListOutputError:
+      return None #don't know if the job finished, probably a temporary glitch
+
+    if not freshjoblist:
+      runningjobs += pendingjobs
+      pendingjobs = []
+
+    maxseenjob = -float("inf"), -float("inf")
+    for runningjob in runningjobs + pendingjobs:
+      maxseenjob = max(runningjob, maxseenjob)
+
+    for runningjob in runningjobs:
+      self.__knownrunningjobs.add(runningjob)
+      if runningjob == (cpuid, jobid):
+        return False #job is still running
+
+    for pendingjob in pendingjobs:
+      assert freshsqueue
+      if pendingjob == (cpuid, jobid):
+        return True #can happen if the job was cancelled and automatically resubmitted (happens on slurm, don't know about others)
+
+    if not freshjoblist and (cpuid, jobid) > maxseenjob:
+      return None #don't know if the job was started after the job list command was run
+
+    return True #job is finished
+
+class Condor(BatchSubmissionSystem):
+  @staticmethod
+  def CONDOR_JOBINFO():
+    if "_CONDOR_SCRATCH_DIR" not in os.environ: return None
+    try:
+      return os.environ["CONDOR_CLUSTERID"], os.environ["CONDOR_PROCID"]
+    except KeyError:
+      raise OSError("""Please put 'environment = "CONDOR_CLUSTERID=$(ClusterId) CONDOR_PROCID=$(ProcId)"' in your condor submission script""")
+  def jobtype(self): return "CONDOR"
+  def jobinfo(self):
+    jobinfo = self.CONDOR_JOBINFO()
+    if jobinfo is not None: return self.jobtype(), jobinfo[0], jobinfo[1]
+    raise self.WrongBatchSystemError()
+
+  def joblistcommand(self, cpuid, jobid):
+    return ["condor_q", "-nobatch", "-run"]
+
+  def processjoblistcommanderror(self, calledprocesserror):
+    if b"Can't find address for schedd" in e.output:
+      raise JobListCommandError(calledprocesserror)
+    raise calledprocesserror
+
+  def runningjobsfromoutput(self, output):
+    running, pending = [], []
+    for line in output.decode("ascii").split("\n"):
+      line = line.strip()
+      if not line: continue
+      if line.startswith("-- Schedd:"): continue
+      if line.startswith(b"ID "): continue
+      jobid = line.split()[0]
+      clusterid, procid = jobid.split(".")
+      clusterid = int(clusterid)
+      procid = int(procid)
+      running.append((clusterid, procid))
+    return running, pending
+
+class Slurm(BatchSubmissionSystem):
+  @staticmethod
+  def SLURM_JOBID():
+    return os.environ.get("SLURM_JOBID", None)
+  def jobtype(self): return "SLURM"
+  def jobinfo(self):
+    jobid = self.SLURM_JOBID()
+    if jobid is None: raise self.WrongBatchSystemError()
+    return self.jobtype(), 0, jobid
+
+  def joblistcommand(self, cpuid, jobid):
+    return ["squeue", "--job", str(jobid), "--Format", "jobid,state", "--noheader"]
+
+  def processjoblistcommanderror(self, calledprocesserror):
+    if b"slurm_load_jobs error: Invalid job id specified" in calledprocesserror.output:
+      return True #job is finished
+    if b"slurm_load_jobs error: Unable to contact slurm controller (connect failure)" in calledprocesserror.output:
+      raise JobListCommandError(calledprocesserror)
+    if b"slurm_load_jobs error: Socket timed out on send/recv operation" in calledprocesserror.output:
+      raise JobListCommandError(calledprocesserror)
+    raise calledprocesserror
+
+  def runningjobsfromoutput(self, output):
+    running, pending = [], []
+    for line in output.decode("ascii").split("\n"):
+      line = line.strip()
+      if not line: continue
+      try:
+        jobid, state = line.split()
+      except ValueError:
+        raise self.InvalidJobListOutputError()
+      jobid = int(jobid)
+      if state in ("PENDING", "PD"):
+        pending.append((0, jobid))
+      else:
+        running.append((0, jobid))
+
+    return running, pending
+
+slurm = Slurm()
+condor = Condor()
+batchsubmissionsystems = [slurm, condor]
+
+setsqueueoutput = slurm.setjoblistoutput
+setcondorqoutput = condor.setjoblistoutput
+SLURM_JOBID = slurm.SLURM_JOBID
+
 def jobinfo():
-  slurm = SLURM_JOBID()
-  if slurm is not None:
-    return "SLURM", 0, slurm
-  condor = CONDOR_JOBINFO()
-  if condor is not None:
-    return "CONDOR", condor[0], condor[1]
+  for system in batchsubmissionsystems:
+    try:
+      return system.jobinfo()
+    except BatchSubmissionSystem.WrongBatchSystemError:
+      pass
   return sys.platform, cpuid(), os.getpid()
 
 class JobLock(object):
@@ -220,7 +381,7 @@ class JobLock(object):
           else:
             return self
         else:
-          if jobfinished(*self.oldjobinfo, dosqueue=self.dosqueue, cachesqueue=self.cachesqueue):
+          if jobfinished(*self.oldjobinfo, dojoblist=self.dosqueue, cachejoblist=self.cachesqueue):
             for outputfile in self.outputfiles:
               rm_missing_ok(outputfile)
             rm_missing_ok(self.filename)
@@ -281,132 +442,17 @@ class JobLock(object):
   def setdefaultcorruptfiletimeout(cls, timeout):
     cls.defaultcorruptfiletimeout = timeout
 
-__knownrunningslurmjobs = set()
-__squeueoutput = None
-__squeueerror = False
-
-__knownrunningcondorjobs = set()
-__condorqerror = False
-__condorqoutput = None
-
-def setsqueueoutput(*, output=None, filename=None):
-  global __squeueoutput
-  if filename is not None and output is not None:
-    raise TypeError("Provided both output and filename")
-  if output is not None:
-    __squeueoutput = output
-  elif filename is not None:
-    with open(filename, "rb") as f:
-      __squeueoutput = f.read()
-  else:
-    __squeueoutput = None
-
-def setcondorqoutput(*, output=None, filename=None):
-  global __condorqoutput
-  if filename is not None and output is not None:
-    raise TypeError("Provided both output and filename")
-  if output is not None:
-    __condorqoutput = output
-  elif filename is not None:
-    with open(filename, "rb") as f:
-      __condorqoutput = f.read()
-  else:
-    __condorqoutput = None
-
 def clear_running_jobs_cache():
-  __knownrunningslurmjobs.clear()
-  __knownrunningcondorjobs.clear()
+  for system in batchsubmissionsystems:
+    system.clearrunningjobscache()
 
-def jobfinished(jobtype, cpuid, jobid, *, dosqueue=True, docondorq=True, cachesqueue=True, cachecondorq=True, squeueoutput=None, condorqoutput=None):
-  if jobtype == "SLURM":
-    global __squeueerror
-    if __squeueerror: dosqueue = False
-    if squeueoutput is None: squeueoutput = __squeueoutput
-
-    if cachesqueue and jobid in __knownrunningslurmjobs: return False #assume job is still running
-    if not dosqueue and squeueoutput is None: return None #don't know if the job finished
+def jobfinished(jobtype, cpuid, jobid, *, dojoblist=True, cachejoblist=True):
+  for system in batchsubmissionsystems:
     try:
-      if squeueoutput is not None:
-        output = squeueoutput
-        freshsqueue = False
-      else:
-        output = subprocess.check_output(["squeue", "--job", str(jobid), "--Format", "jobid,state", "--noheader"], stderr=subprocess.STDOUT)
-        freshsqueue = True
+      return system.jobfinished(jobtype=jobtype, cpuid=cpuid, jobid=jobid, dojoblist=dojoblist, cachejoblist=cachejoblist)
+    except BatchSubmissionSystem.WrongBatchSystemError:
+      pass
 
-      maxseenjobid = -float("inf")
-      for line in output.split(b"\n"):
-        line = line.strip()
-        if not line: continue
-        try:
-          runningjobid, state = line.split()
-        except ValueError:
-          return None #don't know if the job finished, probably a temporary glitch in squeue
-        runningjobid = int(runningjobid)
-        maxseenjobid = max(runningjobid, maxseenjobid)
-        if runningjobid == jobid:
-          state = state.decode("ascii")
-          if state in ("PENDING", "PD") and freshsqueue:
-            #this can happen if the job was cancelled due to node failure and was automatically resubmitted
-            return True #job is not currently running
-          else:
-            __knownrunningslurmjobs.add(jobid)
-            return False #job is still running
-      if not freshsqueue and jobid > maxseenjobid:
-        return None #don't know if the job was started after squeue was run
-      return True #job is finished
-    except FileNotFoundError:  #no squeue
-      return None  #we don't know if the job finished
-    except subprocess.CalledProcessError as e:
-      if b"slurm_load_jobs error: Invalid job id specified" in e.output:
-        return True #job is finished
-      if b"slurm_load_jobs error: Unable to contact slurm controller (connect failure)" in e.output:
-        __squeueerror = True
-        return None #we don't know if the job finished
-      if b"slurm_load_jobs error: Socket timed out on send/recv operation" in e.output:
-        __squeueerror = True
-        return None #we don't know if the job finished
-      print(e.output)
-      raise
-  elif jobtype == "CONDOR":
-    global __condorqerror
-    if __condorqerror: docondorq = False
-    if condorqoutput is None: condorqoutput = __condorqoutput
-
-    if cachecondorq and (cpuid, jobid) in __knownrunningcondorjobs: return False #assume job is still running
-    if not docondorq and condorqoutput is None: return None #don't know if the job finished
-    try:
-      if condorqoutput is not None:
-        output = condorqoutput
-        freshcondorq = False
-      else:
-        output = subprocess.check_output(["condor_q", "-nobatch", "-run"], stderr=subprocess.STDOUT)
-        freshcondorq = True
-
-      maxseenjobid = -float("inf")
-      for line in output.split(b"\n"):
-        line = line.strip()
-        if not line: continue
-        if line.startswith(b"-- Schedd:"): continue
-        if line.startswith(b"ID "): continue
-        runningjobid = line.split()[0]
-        try:
-          runningclusterid, runningprocid = (int(_) for _ in runningjobid.split(b"."))
-        except ValueError:
-          return None #don't know if the job finished, probably a temporary glitch in squeue
-        if runningclusterid == cpuid and runningprocid == jobid:
-          __knownrunningcondorjobs.add((cpuid, jobid))
-          return False #job is still running
-      if not freshcondorq and jobid > maxseenjobid:
-        return None #don't know if the job was started after condor_q was run
-      return True #job is finished
-    except FileNotFoundError:  #no condor_q
-      return None  #we don't know if the job finished
-    except subprocess.CalledProcessError as e:
-      if b"Can't find address for schedd" in e.output:
-        __condorqerror = True
-        return None #we don't know if the job finished
-      print(e.output)
-      raise
   else:
     myjobtype, mycpuid, myjobid = jobinfo()
     if myjobtype != jobtype: return None #we don't know if the job finished
