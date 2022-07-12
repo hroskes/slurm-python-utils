@@ -154,8 +154,8 @@ class Condor(BatchSubmissionSystem):
     return ["condor_q", "-nobatch", "-run"]
 
   def processjoblistcommanderror(self, calledprocesserror):
-    if b"Can't find address for schedd" in e.output:
-      raise JobListCommandError(calledprocesserror)
+    if b"Can't find address for schedd" in calledprocesserror.output:
+      raise self.JobListCommandError(calledprocesserror)
     raise calledprocesserror
 
   def runningjobsfromoutput(self, output):
@@ -189,9 +189,9 @@ class Slurm(BatchSubmissionSystem):
     if b"slurm_load_jobs error: Invalid job id specified" in calledprocesserror.output:
       return True #job is finished
     if b"slurm_load_jobs error: Unable to contact slurm controller (connect failure)" in calledprocesserror.output:
-      raise JobListCommandError(calledprocesserror)
+      raise self.JobListCommandError(calledprocesserror)
     if b"slurm_load_jobs error: Socket timed out on send/recv operation" in calledprocesserror.output:
-      raise JobListCommandError(calledprocesserror)
+      raise self.JobListCommandError(calledprocesserror)
     raise calledprocesserror
 
   def runningjobsfromoutput(self, output):
