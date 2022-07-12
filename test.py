@@ -513,6 +513,82 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with JobLock(self.tmpdir/"lock6.lock") as lock6:
       self.assertFalse(lock6)
 
+  def testinvalidsqueue(self):
+    dummysqueue = """
+      #!/bin/bash
+      echo '
+           1234567
+      '
+    """.lstrip()
+    with open(self.tmpdir/"squeue", "w") as f:
+      f.write(dummysqueue)
+    (self.tmpdir/"squeue").chmod(0o0777)
+    os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
+
+    with open(self.tmpdir/"lock1.lock", "w") as f:
+      f.write("SLURM 0 1234567")
+
+    with JobLock(self.tmpdir/"lock1.lock") as lock1:
+      self.assertFalse(lock1)
+
+  def testsqueueerror(self):
+    dummysqueue = """
+      #!/bin/bash
+      if [ $2 -eq 1234567 ]; then
+        echo "slurm_load_jobs error: Invalid job id specified"
+      elif [ $2 -eq 1234568 ]; then
+        echo "slurm_load_jobs error: Unable to contact slurm controller (connect failure)"
+      elif [ $2 -eq 1234569 ]; then
+        echo "slurm_load_jobs error: Socket timed out on send/recv operation"
+      else
+        : nothing
+      fi
+      exit 1
+    """.lstrip()
+    with open(self.tmpdir/"squeue", "w") as f:
+      f.write(dummysqueue)
+    (self.tmpdir/"squeue").chmod(0o0777)
+    os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
+
+    with open(self.tmpdir/"lock1.lock", "w") as f:
+      f.write("SLURM 0 1234567")
+    with open(self.tmpdir/"lock2.lock", "w") as f:
+      f.write("SLURM 0 1234568")
+    with open(self.tmpdir/"lock3.lock", "w") as f:
+      f.write("SLURM 0 1234567")
+    with open(self.tmpdir/"lock4.lock", "w") as f:
+      f.write("SLURM 0 1234567")
+    with open(self.tmpdir/"lock5.lock", "w") as f:
+      f.write("SLURM 0 1234569")
+    with open(self.tmpdir/"lock6.lock", "w") as f:
+      f.write("SLURM 0 1234567")
+    with open(self.tmpdir/"lock7.lock", "w") as f:
+      f.write("SLURM 0 1234570")
+    with open(self.tmpdir/"lock8.lock", "w") as f:
+      f.write("SLURM 0 1234567")
+
+    with JobLock(self.tmpdir/"lock1.lock") as lock1:
+      self.assertTrue(lock1)
+    with JobLock(self.tmpdir/"lock2.lock") as lock2:
+      self.assertFalse(lock2)
+    with JobLock(self.tmpdir/"lock3.lock") as lock3:
+      #won't try to run squeue anymore because lock2 gave an unknown error
+      self.assertFalse(lock3)
+    clear_running_jobs_cache()
+    with JobLock(self.tmpdir/"lock4.lock") as lock4:
+      #will now try again because the cache is cleared
+      self.assertTrue(lock4)
+    with JobLock(self.tmpdir/"lock5.lock") as lock5:
+      self.assertFalse(lock5)
+    with JobLock(self.tmpdir/"lock6.lock") as lock6:
+      self.assertFalse(lock6)
+    clear_running_jobs_cache()
+    with self.assertRaises(subprocess.CalledProcessError):
+      with JobLock(self.tmpdir/"lock7.lock") as lock7:
+        self.assertFalse(lock7)
+    with JobLock(self.tmpdir/"lock8.lock") as lock8:
+      self.assertTrue(lock8)
+
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--debug-log", action="store_true")

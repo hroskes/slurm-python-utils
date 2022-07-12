@@ -55,6 +55,7 @@ class BatchSubmissionSystem(abc.ABC):
 
   def clearrunningjobscache(self):
     self.__knownrunningjobs.clear()
+    self.__joblisterror = False
 
   def setjoblistoutput(self, *, output=None, filename=None):
     if filename is not None and output is not None:
@@ -97,7 +98,7 @@ class BatchSubmissionSystem(abc.ABC):
           self.__joblisterror = True
           return None #we don't know if the job finished
         except subprocess.CalledProcessError:
-          print(e.output)
+          print(e.output.decode("ascii"), end="")
           raise
       freshjoblist = True
 
