@@ -1,5 +1,6 @@
 import argparse, contextlib, datetime, logging, multiprocessing, os, pathlib, subprocess, sys, tempfile, time, unittest
 from job_lock import clean_up_old_job_locks, clear_running_jobs_cache, JobLock, JobLockAndWait, jobinfo, MultiJobLock, setsqueueoutput, slurm_clean_up_temp_dir, slurm_rsync_input, slurm_rsync_output
+from job_lock.job_lock import clean_up_old_job_locks_argparse
 
 logger = logging.getLogger("JobLock")
 
@@ -23,6 +24,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     clear_running_jobs_cache()
     setsqueueoutput()
     logger.setLevel(self.loglevel)
+    JobLock.setdefaultcorruptfiletimeout(None)
   def tearDown(self):
     del self.tmpdir
     self.close()
@@ -30,12 +32,12 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     os.environ.update(self.bkpenviron)
 
   def testJobLock(self):
-    with JobLock(self.tmpdir/"lock1.lock") as lock1:
+    with JobLock(self.tmpdir/"lock1.lck") as lock1:
       self.assertTrue(lock1)
-      self.assertEqual(lock1.iterative_lock_filename, self.tmpdir/"lock1.lock_2")
-      with JobLock(self.tmpdir/"lock2.lock") as lock2:
+      self.assertEqual(lock1.iterative_lock_filename, self.tmpdir/"lock1.lck.lock")
+      with JobLock(self.tmpdir/"lock2.lck") as lock2:
         self.assertTrue(lock2)
-      with JobLock(self.tmpdir/"lock1.lock") as lock3:
+      with JobLock(self.tmpdir/"lock1.lck") as lock3:
         self.assertFalse(lock3)
         self.assertEqual(lock3.debuginfo, {"outputsexist": None, "inputsexist": None, "prevsteplockfilesexist": None, "oldjobinfo": jobinfo(), "removed_failed_job": False, "iterative_lock_debuginfo": {"inputsexist": None, "iterative_lock_debuginfo": None, "oldjobinfo": None, "outputsexist": None, "prevsteplockfilesexist": None, "removed_failed_job": False}})
 
@@ -363,23 +365,26 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     time.sleep(1)
     with open(self.tmpdir/"lock1.lock_10", "w"): pass
     with open(self.tmpdir/"lock1.lock", "w"): pass
-    with JobLock(self.tmpdir/"lock1.lock", corruptfiletimeout=datetime.timedelta(seconds=1)) as lock:
+    with open(self.tmpdir/"output.txt", "w"): pass
+    with JobLock(self.tmpdir/"lock1.lock", corruptfiletimeout=datetime.timedelta(seconds=1), outputfiles=[self.tmpdir/"output.txt"]) as lock:
       self.assertFalse(lock)
       self.assertIsInstance(lock.debuginfo["oldjobinfo"], ValueError)
     self.assertFalse((self.tmpdir/"lock1.lock_2").exists())
     self.assertTrue((self.tmpdir/"lock1.lock_5").exists())
     self.assertTrue((self.tmpdir/"lock1.lock_10").exists())
     self.assertTrue((self.tmpdir/"lock1.lock_30").exists())
+    self.assertTrue((self.tmpdir/"output.txt").exists())
     time.sleep(1)
-    with JobLock(self.tmpdir/"lock1.lock") as lock:
+    with JobLock(self.tmpdir/"lock1.lock", outputfiles=[self.tmpdir/"output.txt"]) as lock:
       self.assertFalse(lock)
-    with JobLock(self.tmpdir/"lock1.lock", corruptfiletimeout=datetime.timedelta(seconds=10)) as lock:
+    with JobLock(self.tmpdir/"lock1.lock", corruptfiletimeout=datetime.timedelta(seconds=10), outputfiles=[self.tmpdir/"output.txt"]) as lock:
       self.assertFalse(lock)
-    with JobLock(self.tmpdir/"lock1.lock", corruptfiletimeout=datetime.timedelta(seconds=1)) as lock:
+    with JobLock(self.tmpdir/"lock1.lock", corruptfiletimeout=datetime.timedelta(seconds=1), outputfiles=[self.tmpdir/"output.txt"]) as lock:
       self.assertTrue(lock)
     self.assertFalse((self.tmpdir/"lock1.lock_5").exists())
     self.assertFalse((self.tmpdir/"lock1.lock_10").exists())
     self.assertFalse((self.tmpdir/"lock1.lock_30").exists())
+    self.assertFalse((self.tmpdir/"output.txt").exists())
 
   def testCleanUp(self):
     with open(self.tmpdir/"lock1.lock_2", "w"): pass
@@ -394,13 +399,13 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     self.assertTrue((self.tmpdir/"lock1.lock_30").exists())
     time.sleep(1)
     clean_up_old_job_locks(self.tmpdir, howold=datetime.timedelta(seconds=1), dryrun=True, silent=True)
-    subprocess.run(["clean_up_old_job_locks", self.tmpdir, "--hours-old", str(1/3600), "--silent", "--dry-run"], check=True)
+    clean_up_old_job_locks_argparse(["clean_up_old_job_locks", os.fspath(self.tmpdir), "--hours-old", str(1/3600), "--silent", "--dry-run"])
     self.assertTrue((self.tmpdir/"lock1.lock_2").exists())
     self.assertTrue((self.tmpdir/"lock1.lock_5").exists())
     self.assertTrue((self.tmpdir/"lock1.lock_10").exists())
     self.assertTrue((self.tmpdir/"lock1.lock_30").exists())
-    subprocess.run(["clean_up_old_job_locks", self.tmpdir, "--hours-old", str(1/3600), "--silent"], check=True)
     clean_up_old_job_locks(self.tmpdir, howold=datetime.timedelta(seconds=1), silent=True)
+    subprocess.run(["clean_up_old_job_locks", self.tmpdir, "--hours-old", str(1/3600), "--silent"], check=True)
     self.assertFalse((self.tmpdir/"lock1.lock_2").exists())
     self.assertFalse((self.tmpdir/"lock1.lock_5").exists())
     self.assertFalse((self.tmpdir/"lock1.lock_10").exists())
