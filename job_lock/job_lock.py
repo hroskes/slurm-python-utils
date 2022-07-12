@@ -1,6 +1,10 @@
-import abc, argparse, contextlib, datetime, itertools, os, pathlib, random, re, subprocess, sys, time, uuid
+import abc, argparse, contextlib, datetime, itertools, logging, os, pathlib, random, re, subprocess, sys, time, uuid
 if sys.platform != "cygwin":
   import psutil
+
+logging.basicConfig()
+logger = logging.getLogger("JobLock")
+logger.setLevel(logging.INFO)
 
 def rm_missing_ok(path):
   if sys.version_info >= (3, 8):
@@ -62,25 +66,34 @@ class BatchSubmissionSystem(abc.ABC):
       self.__joblistoutput = output
 
   def jobfinished(self, jobtype, cpuid, jobid, *, dojoblist=True, cachejoblist=True):
-    if jobtype != self.jobtype: raise self.WrongBatchSystemError()
+    if jobtype != self.jobtype():
+      raise self.WrongBatchSystemError()
+    logger.debug("Determining if job %s %s %s is finished", jobtype, cpuid, jobid)
     if self.__joblisterror: dojoblist = False
     joblistoutput = self.__joblistoutput
 
-    if cachejoblist and (cpuid, jobid) in self.__knownrunningjobs: return False #assume job is still running
-    if not dojoblist and joblistoutput is None: return None #don't know if the job finished
+    if cachejoblist and (cpuid, jobid) in self.__knownrunningjobs:
+      logger.debug("Job is already known to be running")
+      return False #assume job is still running
+    if not dojoblist and joblistoutput is None:
+      logger.debug("Can't tell, because dojoblist is False and no output has been set")
+      return None #don't know if the job finished
 
     if joblistoutput is not None:
+      logger.debug("Using previously given job list output")
       output = joblistoutput
       freshjoblist = False
     else:
       try:
         output = subprocess.check_output(self.joblistcommand(cpuid, jobid))
       except FileNotFoundError: #command doesn't exist on the batch machines
+        logger.debug("Job list command doesn't exist")
         return None #we don't know if the job finished
       except subprocess.CalledProcessError as e:
         try:
           return self.processjoblistcommanderror(e)
         except self.JobListCommandError:
+          logger.debug("Job list command gave an error")
           self.__joblisterror = True
           return None #we don't know if the job finished
         except subprocess.CalledProcessError:
@@ -91,6 +104,7 @@ class BatchSubmissionSystem(abc.ABC):
     try:
       runningjobs, pendingjobs = self.runningjobsfromoutput(output)
     except self.InvalidJobListOutputError:
+      logger.debug("Job list command gave invalid output")
       return None #don't know if the job finished, probably a temporary glitch
 
     if not freshjoblist:
@@ -103,17 +117,23 @@ class BatchSubmissionSystem(abc.ABC):
 
     for runningjob in runningjobs:
       self.__knownrunningjobs.add(runningjob)
+      logger.debug("Job running: %s %s", cpuid, jobid)
       if runningjob == (cpuid, jobid):
+        logger.debug("Found it!")
         return False #job is still running
 
     for pendingjob in pendingjobs:
-      assert freshsqueue
+      assert freshjoblist
+      logger.debug("Job pending: %s %s", cpuid, jobid)
       if pendingjob == (cpuid, jobid):
+        logger.debug("Found it!")
         return True #can happen if the job was cancelled and automatically resubmitted (happens on slurm, don't know about others)
 
     if not freshjoblist and (cpuid, jobid) > maxseenjob:
+      logger.debug("Job list output was provided manually and the max seen job is %s, so we don't know if %s was submitted later", maxseenjob, (cpuid, jobid))
       return None #don't know if the job was started after the job list command was run
 
+    logger.debug("Didn't find %s, so it must have finished", (cpuid, jobid))
     return True #job is finished
 
 class Condor(BatchSubmissionSystem):
@@ -144,7 +164,7 @@ class Condor(BatchSubmissionSystem):
       line = line.strip()
       if not line: continue
       if line.startswith("-- Schedd:"): continue
-      if line.startswith(b"ID "): continue
+      if line.startswith("ID "): continue
       jobid = line.split()[0]
       clusterid, procid = jobid.split(".")
       clusterid = int(clusterid)

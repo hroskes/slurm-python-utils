@@ -1,7 +1,11 @@
-import contextlib, datetime, multiprocessing, os, pathlib, subprocess, tempfile, time, unittest
+import argparse, contextlib, datetime, logging, multiprocessing, os, pathlib, subprocess, sys, tempfile, time, unittest
 from job_lock import clean_up_old_job_locks, clear_running_jobs_cache, JobLock, JobLockAndWait, jobinfo, MultiJobLock, setsqueueoutput, slurm_clean_up_temp_dir, slurm_rsync_input, slurm_rsync_output
 
+logger = logging.getLogger("JobLock")
+
 class TestJobLock(unittest.TestCase, contextlib.ExitStack):
+  loglevel = logging.INFO
+
   def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
     try:
@@ -10,6 +14,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       contextlib.ExitStack.__init__(self)
     self.maxDiff = None
   def setUp(self):
+    super().setUp()
     self.tmpdir = pathlib.Path(self.enter_context(tempfile.TemporaryDirectory()))
     self.bkpenviron = os.environ.copy()
     self.slurm_tmpdir = self.tmpdir/"slurm_tmpdir"
@@ -17,6 +22,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     os.environ["TMPDIR"] = os.fspath(self.slurm_tmpdir)
     clear_running_jobs_cache()
     setsqueueoutput()
+    logger.setLevel(self.loglevel)
   def tearDown(self):
     del self.tmpdir
     self.close()
@@ -507,3 +513,17 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with JobLock(self.tmpdir/"lock6.lock") as lock6:
       self.assertFalse(lock6)
 
+def main():
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--debug-log", action="store_true")
+  parser.add_argument("unittest_args", nargs="*")
+
+  args = parser.parse_args()
+  if args.debug_log:
+    TestJobLock.loglevel = logging.DEBUG
+
+  sys.argv[1:] = args.unittest_args
+  unittest.main()
+
+if __name__ == "__main__":
+  main()
