@@ -542,7 +542,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       if [ $2 -eq 1234567 ]; then
         echo "slurm_load_jobs error: Invalid job id specified"
       elif [ $2 -eq 1234568 ]; then
-        echo "slurm_load_jobs error: Unable to contact slurm controller (connect failure)"
+        echo "slurm_load_jobs error: Unable to contact slurm controller (connect failure)" >&2
       elif [ $2 -eq 1234569 ]; then
         echo "slurm_load_jobs error: Socket timed out on send/recv operation"
       else
@@ -553,7 +553,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
 
     badcondorq = """
       #!/bin/bash
-      echo "Can't find address for schedd"
+      echo "Can't find address for schedd" >&2
       exit 1
     """.lstrip()
     goodcondorq = """

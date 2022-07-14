@@ -86,7 +86,7 @@ class BatchSubmissionSystem(abc.ABC):
       freshjoblist = False
     else:
       try:
-        output = subprocess.check_output(self.joblistcommand(cpuid, jobid))
+        output = subprocess.check_output(self.joblistcommand(cpuid, jobid), stderr=subprocess.STDOUT)
       except FileNotFoundError: #command doesn't exist on the batch machines
         logger.debug("Job list command doesn't exist")
         return None #we don't know if the job finished
