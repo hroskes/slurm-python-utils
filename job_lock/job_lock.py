@@ -2,7 +2,6 @@ import abc, argparse, contextlib, datetime, itertools, logging, os, pathlib, ran
 if sys.platform != "cygwin":
   import psutil
 
-logging.basicConfig()
 logger = logging.getLogger("JobLock")
 logger.setLevel(logging.INFO)
 
