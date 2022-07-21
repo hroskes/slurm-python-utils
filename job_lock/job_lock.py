@@ -371,23 +371,38 @@ class JobLock(object):
       #a race condition: two jobs could be looking if the previous
       #job failed at the same time, and one of them could remove
       #the lock created by the other one
-      with JobLock(self.iterative_lock_filename, **self.sublockkwargs) as iterative_lock:
-        self.__iterative_lock = iterative_lock
-        if not iterative_lock: return self
-        try:
-          self.__oldjobinfo = self.runningjobinfo(exceptions=True)
-        except (IOError, OSError) as e:
-          self.__oldjobinfo = e
+      try:
+        with JobLock(self.iterative_lock_filename, **self.sublockkwargs) as iterative_lock:
+          self.__iterative_lock = iterative_lock
+          if not iterative_lock: return self
           try:
-            self.__open()
-          except FileExistsError:
-            return self
-        except ValueError as e:
-          self.__oldjobinfo = e
-          if self.corruptfiletimeout is not None:
-            modified = datetime.datetime.fromtimestamp(self.filename.stat().st_mtime)
-            now = datetime.datetime.now()
-            if now - modified >= self.corruptfiletimeout:
+            self.__oldjobinfo = self.runningjobinfo(exceptions=True)
+          except (IOError, OSError) as e:
+            self.__oldjobinfo = e
+            try:
+              self.__open()
+            except FileExistsError:
+              return self
+          except ValueError as e:
+            self.__oldjobinfo = e
+            if self.corruptfiletimeout is not None:
+              modified = datetime.datetime.fromtimestamp(self.filename.stat().st_mtime)
+              now = datetime.datetime.now()
+              if now - modified >= self.corruptfiletimeout:
+                for outputfile in self.outputfiles:
+                  rm_missing_ok(outputfile)
+                rm_missing_ok(self.filename)
+                self.removed_failed_job = True
+                try:
+                  self.__open()
+                except FileExistsError:
+                  return self
+              else:
+                return self
+            else:
+              return self
+          else:
+            if jobfinished(*self.oldjobinfo, dojoblist=self.dosqueue, cachejoblist=self.cachesqueue):
               for outputfile in self.outputfiles:
                 rm_missing_ok(outputfile)
               rm_missing_ok(self.filename)
@@ -398,20 +413,8 @@ class JobLock(object):
                 return self
             else:
               return self
-          else:
-            return self
-        else:
-          if jobfinished(*self.oldjobinfo, dojoblist=self.dosqueue, cachejoblist=self.cachesqueue):
-            for outputfile in self.outputfiles:
-              rm_missing_ok(outputfile)
-            rm_missing_ok(self.filename)
-            self.removed_failed_job = True
-            try:
-              self.__open()
-            except FileExistsError:
-              return self
-          else:
-            return self
+      except RecursionError:
+        return self
     except FileNotFoundError:
       if self.suppressfileopenfailure and self.filename.parent.exists():
         return self
