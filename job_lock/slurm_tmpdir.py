@@ -1,13 +1,18 @@
 from .job_lock import JobLockAndWait, SLURM_JOBID
 import contextlib, os, pathlib, shutil, subprocess
 
-def _rsync(source, dest, *, silent, copylinks):
+def _rsync(source, dest, *, silent, copylinks, vvv=False):
   args = ["-az", "--partial"]
   if copylinks: args.append("-L")
-  if not silent: args += ["-v", "--progress"]
+  if not silent:
+    if vvv:
+      args.append("-vvv")
+    else:
+      args.append("-v")
+    args.append("--progress")
   subprocess.check_call(["rsync", *args, os.fspath(source), os.fspath(dest)])
 
-def slurm_rsync_input(filename, *, tempfilename=None, copylinks=True, silentjoblock=None, silentrsync=None):
+def slurm_rsync_input(filename, *, tempfilename=None, copylinks=True, silentjoblock=None, silentrsync=None, vvv=False):
   filename = pathlib.Path(filename)
   if not filename.is_absolute(): raise ValueError(f"filename {filename} has to be an absolute path")
 
@@ -27,7 +32,7 @@ def slurm_rsync_input(filename, *, tempfilename=None, copylinks=True, silentjobl
     assert lockfilename != tempfilename
     try:
       with JobLockAndWait(lockfilename, 10, task=f"rsyncing {filename}", silent=silentjoblock):
-        _rsync(filename, tempfilename, silent=silentrsync, copylinks=copylinks)
+        _rsync(filename, tempfilename, silent=silentrsync, copylinks=copylinks, vvv=vvv)
     except subprocess.CalledProcessError:
       return filename
     return tempfilename
@@ -35,7 +40,7 @@ def slurm_rsync_input(filename, *, tempfilename=None, copylinks=True, silentjobl
     return filename
 
 @contextlib.contextmanager
-def slurm_rsync_output(filename, *, tempfilename=None, copylinks=True, silentrsync=None, ok_if_not_created=False):
+def slurm_rsync_output(filename, *, tempfilename=None, copylinks=True, silentrsync=None, ok_if_not_created=False, vvv=False):
   filename = pathlib.Path(filename)
   if not filename.is_absolute(): raise ValueError(f"filename {filename} has to be an absolute path")
 
@@ -55,7 +60,7 @@ def slurm_rsync_output(filename, *, tempfilename=None, copylinks=True, silentrsy
         return
       else:
         raise FileNotFoundError(f"{tmpoutput} was not created in the with block")
-    _rsync(tmpoutput, filename, silent=silentrsync, copylinks=copylinks)
+    _rsync(tmpoutput, filename, silent=silentrsync, copylinks=copylinks, vvv=vvv)
   else:
     yield filename
 
