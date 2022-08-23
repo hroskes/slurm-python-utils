@@ -647,6 +647,10 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     p.add_argument("--another", type=int)
     add_job_lock_arguments(p)
 
+    argv = ["--help"]
+    with open(os.devnull, "w") as devnull, contextlib.redirect_stdout(devnull), self.assertRaises(SystemExit):
+      p.parse_args(argv)
+
     squeueoutput = """
            1234567   RUNNING
            1234568   PENDING

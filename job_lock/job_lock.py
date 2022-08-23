@@ -618,7 +618,7 @@ def add_job_lock_arguments(argumentparser):
     if match is None:
       raise ValueError(f"{s} does not match {regex}")
     return datetime.timedelta(hours=int(match.group("hours")), minutes=int(match.group("minutes")), seconds=float(match.group("seconds")))
-  p.add_argument("--corrupt-job-lock-timeout", type=parsetimedelta, help="delete corrupt joblock files after this long (%H:%M:%S, default 1:0:0)")
+  p.add_argument("--corrupt-job-lock-timeout", type=parsetimedelta, help="delete corrupt joblock files after this long (%%H:%%M:%%S, default 1:0:0)")
 
 def process_job_lock_arguments(parsed_args):
   dct = parsed_args.__dict__
