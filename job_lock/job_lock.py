@@ -384,13 +384,10 @@ class JobLock(object):
               return self
           except ValueError as e:
             self.__oldjobinfo = e
-            removecorrupt = False
-            if self.corruptfiletimeout is not None:
-              modified = datetime.datetime.fromtimestamp(self.filename.stat().st_mtime)
-              now = datetime.datetime.now()
-              if now - modified >= self.corruptfiletimeout:
-                removecorrupt = True
-            if removecorrupt:
+            modified = datetime.datetime.fromtimestamp(self.filename.stat().st_mtime)
+            now = datetime.datetime.now()
+            age = now - modified
+            if self.corruptfiletimeout is not None and age >= self.corruptfiletimeout:
               for outputfile in self.outputfiles:
                 rm_missing_ok(outputfile)
               rm_missing_ok(self.filename)
@@ -400,7 +397,8 @@ class JobLock(object):
               except FileExistsError:
                 return self
             else:
-              logger.warning(f"{self.filename} is either corrupt or in the process of being created, consider setting a corrupt file timeout to remove it")
+              if age >= datetime.timedelta(seconds=1):
+                logger.warning(f"{self.filename} is likely corrupt (age {age}), consider setting a corrupt file timeout to remove it")
               return self
           else:
             if jobfinished(*self.oldjobinfo, dojoblist=self.dosqueue, cachejoblist=self.cachesqueue):
