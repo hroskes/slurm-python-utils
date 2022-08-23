@@ -5,7 +5,7 @@ from job_lock.job_lock import clean_up_old_job_locks_argparse
 logger = logging.getLogger("JobLock")
 
 class TestJobLock(unittest.TestCase, contextlib.ExitStack):
-  loglevel = logging.INFO
+  loglevel = logging.CRITICAL
 
   def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
@@ -677,6 +677,8 @@ def main():
   args = parser.parse_args()
   if args.debug_log:
     TestJobLock.loglevel = logging.DEBUG
+  else:
+    TestJobLock.loglevel = logging.CRITICAL
 
   sys.argv[1:] = args.unittest_args
   unittest.main()
