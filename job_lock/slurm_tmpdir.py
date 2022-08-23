@@ -1,4 +1,4 @@
-from .job_lock import JobLockAndWait, SLURM_JOBID
+from .job_lock import JobLockAndWait, Slurm
 import contextlib, os, pathlib, shutil, subprocess
 
 def _rsync(source, dest, *, silent, copylinks, vvv=False):
@@ -20,7 +20,7 @@ def slurm_rsync_input(filename, *, tempfilename=None, copylinks=True, silentjobl
   tempfilename = pathlib.Path(tempfilename)
   if tempfilename.is_absolute(): raise ValueError(f"tempfilename {tempfilename} has to be a relative path")
 
-  if SLURM_JOBID() is not None:
+  if Slurm.SLURM_JOBID() is not None:
     tmpdir = pathlib.Path(os.environ["TMPDIR"])
     tempfilename = tmpdir/tempfilename
     if silentrsync is None:
@@ -48,7 +48,7 @@ def slurm_rsync_output(filename, *, tempfilename=None, copylinks=True, silentrsy
   tempfilename = pathlib.Path(tempfilename)
   if tempfilename.is_absolute(): raise ValueError(f"tempfilename {tempfilename} has to be a relative path")
 
-  if SLURM_JOBID() is not None:
+  if Slurm.SLURM_JOBID() is not None:
     tmpdir = pathlib.Path(os.environ["TMPDIR"])
     tmpoutput = tmpdir/tempfilename
     if silentrsync is None:
@@ -65,7 +65,7 @@ def slurm_rsync_output(filename, *, tempfilename=None, copylinks=True, silentrsy
     yield filename
 
 def slurm_clean_up_temp_dir():
-  if SLURM_JOBID() is None: return
+  if Slurm.SLURM_JOBID() is None: return
   tmpdir = pathlib.Path(os.environ["TMPDIR"])
   for filename in tmpdir.iterdir():
     if filename.is_dir() and not filename.is_symlink():

@@ -217,7 +217,6 @@ batchsubmissionsystems = [slurm, condor]
 
 setsqueueoutput = slurm.setjoblistoutput
 setcondorqoutput = condor.setjoblistoutput
-SLURM_JOBID = slurm.SLURM_JOBID
 
 def jobinfo():
   for system in batchsubmissionsystems:
@@ -228,7 +227,7 @@ def jobinfo():
   return sys.platform, cpuid(), os.getpid()
 
 class JobLock(object):
-  defaultcorruptfiletimeout = datetime.timedelta(hours=24)
+  defaultcorruptfiletimeout = datetime.timedelta(hours=1)
 
   def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, prevsteplockfiles=[], corruptfiletimeout=None, mkdir=False, dosqueue=True, cachesqueue=True, suppressfileopenfailure=False):
     self.filename = pathlib.Path(filename)
@@ -603,3 +602,28 @@ class MultiJobLock(contextlib.ExitStack):
         self.close()
         return False
     return True
+
+def add_job_lock_arguments(argumentparser):
+  p = argumentparser
+  g = p.add_mutually_exclusive_group()
+  g.add_argument("--squeue-output", help="output of 'squeue --Format jobid,state --noheader'")
+  g.add_argument("--squeue-output-file", type=pathlib.Path, help="file containing the output of 'squeue --Format jobid,state --noheader'")
+  g = p.add_mutually_exclusive_group()
+  g.add_argument("--condorq-output", help="output of 'condor_q -nobatch'")
+  g.add_argument("--condorq-output-file", type=pathlib.Path, help="file containing the output of 'condor_q -nobatch'")
+
+  def parsetimedelta(s):
+    regex = r"(?P<hours>\d+):(?P<minutes>\d+):(?P<seconds>\d+(?:\.\d*)?)$"
+    match = re.match(regex, s)
+    if match is None:
+      raise ValueError(f"{s} does not match {regex}")
+    return datetime.timedelta(hours=int(match.group("hours")), minutes=int(match.group("minutes")), seconds=float(match.group("seconds")))
+  p.add_argument("--corrupt-job-lock-timeout", type=parsetimedelta, help="delete corrupt joblock files after this long (%H:%M:%S, default 1:0:0)")
+
+def process_job_lock_arguments(parsed_args):
+  dct = parsed_args.__dict__
+  setsqueueoutput(output=dct.pop("squeue_output"), filename=dct.pop("squeue_output_file"))
+  setcondorqoutput(output=dct.pop("condorq_output"), filename=dct.pop("condorq_output_file"))
+
+  timeout = dct.pop("corrupt_job_lock_timeout")
+  JobLock.setdefaultcorruptfiletimeout(timeout)

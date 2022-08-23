@@ -1,5 +1,5 @@
 import argparse, contextlib, datetime, logging, multiprocessing, os, pathlib, subprocess, sys, tempfile, time, unittest
-from job_lock import clean_up_old_job_locks, clear_running_jobs_cache, JobLock, JobLockAndWait, jobinfo, MultiJobLock, setsqueueoutput, slurm_clean_up_temp_dir, slurm_rsync_input, slurm_rsync_output
+from job_lock import add_job_lock_arguments, clean_up_old_job_locks, clear_running_jobs_cache, jobfinished, JobLock, JobLockAndWait, jobinfo, MultiJobLock, process_job_lock_arguments, setsqueueoutput, slurm_clean_up_temp_dir, slurm_rsync_input, slurm_rsync_output
 from job_lock.job_lock import clean_up_old_job_locks_argparse
 
 logger = logging.getLogger("JobLock")
@@ -639,6 +639,35 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
         pass
     with JobLock(self.tmpdir/"lock12.lock") as lock:
       self.assertTrue(lock)
+
+  def testArgParse(self):
+    p = argparse.ArgumentParser()
+    p.add_argument("positional")
+    p.add_argument("--keyword", type=int)
+    p.add_argument("--another", type=int)
+    add_job_lock_arguments(p)
+
+    squeueoutput = """
+           1234567   RUNNING
+           1234568   PENDING
+    """.lstrip()
+    with open(self.tmpdir/"squeueoutput", "w") as f:
+      f.write(squeueoutput)
+
+    argv = ["--squeue-output-file", os.fspath(self.tmpdir/"squeueoutput"), "--corrupt-job-lock-timeout", "0:0:1.3", "positional", "--keyword", "5"]
+    args = p.parse_args(argv)
+    process_job_lock_arguments(args)
+
+    self.assertEqual(args.__dict__, {"positional": "positional", "keyword": 5, "another": None})
+    self.assertEqual(JobLock.defaultcorruptfiletimeout, datetime.timedelta(seconds=1.3))
+    self.assertTrue(jobfinished("SLURM", 0, 1234566))
+    self.assertFalse(jobfinished("SLURM", 0, 1234567))
+    self.assertFalse(jobfinished("SLURM", 0, 1234568))
+    self.assertIsNone(jobfinished("SLURM", 0, 1234569))
+
+    argv = ["--squeue-output-file", os.fspath(self.tmpdir/"squeueoutput"), "--corrupt-job-lock-timeout", "0:0:1.3.2", "positional", "--keyword", "5"]
+    with open(os.devnull, "w") as devnull, contextlib.redirect_stderr(devnull), self.assertRaises(SystemExit):
+      p.parse_args(argv)
 
 def main():
   parser = argparse.ArgumentParser()
