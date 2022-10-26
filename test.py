@@ -17,6 +17,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
   def setUp(self):
     super().setUp()
     self.tmpdir = pathlib.Path(self.enter_context(tempfile.TemporaryDirectory()))
+    os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
     self.bkpenviron = os.environ.copy()
     self.slurm_tmpdir = self.tmpdir/"slurm_tmpdir"
     self.slurm_tmpdir.mkdir()
@@ -25,6 +26,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     setsqueueoutput()
     logger.setLevel(self.loglevel)
     JobLock.setdefaultcorruptfiletimeout(None)
+    JobLock.setdefaultminimumtimeforiterativelocks(None)
   def tearDown(self):
     del self.tmpdir
     self.close()
@@ -118,7 +120,6 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with open(self.tmpdir/"squeue", "w") as f:
       f.write(dummysqueue)
     (self.tmpdir/"squeue").chmod(0o0777)
-    os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
 
     with open(fn1, "w") as f:
       f.write("SLURM 0 1234567")
@@ -167,7 +168,6 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with open(self.tmpdir/"squeue", "w") as f:
       f.write(dummysqueue)
     (self.tmpdir/"squeue").chmod(0o0777)
-    os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
 
     with open(fn1, "w") as f:
       f.write("SLURM 0 1234567")
@@ -220,7 +220,6 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with open(self.tmpdir/"squeue", "w") as f:
       f.write(dummysqueue)
     (self.tmpdir/"squeue").chmod(0o0777)
-    os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
 
     with open(self.tmpdir/"lock1.lock", "w") as f:
       f.write("SLURM 0 1234567")
@@ -249,7 +248,6 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with open(self.tmpdir/"condor_q", "w") as f:
       f.write(dummycondor_q)
     (self.tmpdir/"condor_q").chmod(0o0777)
-    os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
 
     with open(self.tmpdir/"lock1.lock", "w") as f:
       f.write("SLURM 1234567 1")
@@ -289,7 +287,6 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with open(self.tmpdir/"squeue", "w") as f:
       f.write(dummysqueue)
     (self.tmpdir/"squeue").chmod(0o0777)
-    os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
 
     with JobLock(self.tmpdir/"lock.lock") as lock:
       self.assertFalse(lock)
@@ -318,7 +315,6 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with open(self.tmpdir/"squeue", "w") as f:
       f.write(dummysqueue)
     (self.tmpdir/"squeue").chmod(0o0777)
-    os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
 
     with JobLockAndWait(self.tmpdir/"lock2.lock", 0.001, maxiterations=10, silent=True, cachesqueue=False) as lock2:
       self.assertEqual(lock2.niterations, 2)
@@ -385,6 +381,42 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     self.assertFalse((self.tmpdir/"lock1.lock_10").exists())
     self.assertFalse((self.tmpdir/"lock1.lock_30").exists())
     self.assertFalse((self.tmpdir/"output.txt").exists())
+
+  def testMinimumTimeForIterativeLocks(self):
+    dummysqueue = """
+      #!/bin/bash
+      echo '
+      '
+    """.lstrip()
+    with open(self.tmpdir/"squeue", "w") as f:
+      f.write(dummysqueue)
+    (self.tmpdir/"squeue").chmod(0o0777)
+
+    fn1 = self.tmpdir/"lock1.lock"
+    fn2 = self.tmpdir/"lock1.lock_2"
+    fn3 = self.tmpdir/"lock1.lock_3"
+    with open(fn1, "w") as f: f.write("SLURM 0 1234567")
+    time.sleep(0.5)
+    with open(fn3, "w") as f: f.write("SLURM 0 1234567")
+    time.sleep(0.5)
+    with open(fn2, "w") as f: f.write("SLURM 0 1234567")
+
+    with JobLock(fn1, minimumtimeforiterativelocks=datetime.timedelta(seconds=1)) as lock:
+      self.assertFalse(lock)
+    self.assertTrue(fn1.exists())
+    self.assertTrue(fn2.exists())
+    self.assertTrue(fn3.exists())
+    time.sleep(1)
+    with JobLock(fn1, minimumtimeforiterativelocks=datetime.timedelta(seconds=10)) as lock:
+      self.assertFalse(lock)
+    self.assertTrue(fn1.exists())
+    self.assertTrue(fn2.exists())
+    self.assertTrue(fn3.exists())
+    with JobLock(fn1, minimumtimeforiterativelocks=datetime.timedelta(seconds=1)) as lock:
+      self.assertTrue(lock)
+    self.assertFalse(fn1.exists())
+    self.assertFalse(fn2.exists())
+    self.assertFalse(fn3.exists())
 
   def testCleanUp(self):
     with open(self.tmpdir/"lock1.lock_2", "w"): pass
@@ -528,7 +560,6 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with open(self.tmpdir/"squeue", "w") as f:
       f.write(dummysqueue)
     (self.tmpdir/"squeue").chmod(0o0777)
-    os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
 
     with open(self.tmpdir/"lock1.lock", "w") as f:
       f.write("SLURM 0 1234567")
@@ -575,7 +606,6 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     (self.tmpdir/"squeue").chmod(0o0777)
     with open(self.tmpdir/"condor_q", "w") as f: f.write(goodcondorq)
     (self.tmpdir/"condor_q").chmod(0o0777)
-    os.environ["PATH"] = f"{self.tmpdir}:"+os.environ["PATH"]
 
     with open(self.tmpdir/"lock1.lock", "w") as f:
       f.write("SLURM 0 1234567")
@@ -658,12 +688,13 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with open(self.tmpdir/"squeueoutput", "w") as f:
       f.write(squeueoutput)
 
-    argv = ["--squeue-output-file", os.fspath(self.tmpdir/"squeueoutput"), "--corrupt-job-lock-timeout", "0:0:1.3", "positional", "--keyword", "5"]
+    argv = ["--squeue-output-file", os.fspath(self.tmpdir/"squeueoutput"), "--corrupt-job-lock-timeout", "0:0:1.3", "positional", "--minimum-time-for-iterative-locks", "1:1:1.5", "--keyword", "5"]
     args = p.parse_args(argv)
     process_job_lock_arguments(args)
 
     self.assertEqual(args.__dict__, {"positional": "positional", "keyword": 5, "another": None})
     self.assertEqual(JobLock.defaultcorruptfiletimeout, datetime.timedelta(seconds=1.3))
+    self.assertEqual(JobLock.defaultminimumtimeforiterativelocks, datetime.timedelta(seconds=3661.5))
     self.assertTrue(jobfinished("SLURM", 0, 1234566))
     self.assertFalse(jobfinished("SLURM", 0, 1234567))
     self.assertFalse(jobfinished("SLURM", 0, 1234568))
