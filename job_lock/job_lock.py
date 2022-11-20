@@ -540,7 +540,7 @@ class JobLockAndWait(JobLock):
             raise FileNotFoundError(message)
       else:
         if not self.__silent: print(self.__printmessage)
-      time.sleep(self.delay)
+      time.sleep(self.delay * (1 + 0.1 * (random.random() - 0.5)))
 
 def clean_up_old_job_locks(*folders, glob="*.lock_*", howold=datetime.timedelta(days=7), dryrun=False, silent=False):
   for folder in folders:
