@@ -25,6 +25,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     clear_running_jobs_cache()
     setsqueueoutput()
     logger.setLevel(self.loglevel)
+    JobLock.setdefaulttimeout(None)
     JobLock.setdefaultcorruptfiletimeout(None)
     JobLock.setdefaultminimumtimeforiterativelocks(None)
   def tearDown(self):
@@ -353,6 +354,19 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       self.assertTrue(lock3)
       self.assertGreaterEqual(lock3.niterations, 3)
       self.assertLessEqual(lock3.niterations, 4)
+
+  def testTimeout(self):
+    with JobLock(self.tmpdir/"lock1.lock", outputfiles=[self.tmpdir/"output.txt"]) as lock:
+      self.assertTrue(lock)
+      with JobLock(self.tmpdir/"lock1.lock", outputfiles=[self.tmpdir/"output.txt"]) as lock:
+        self.assertFalse(lock)
+      with JobLock(self.tmpdir/"lock1.lock", timeout=datetime.timedelta(seconds=1), outputfiles=[self.tmpdir/"output.txt"]) as lock:
+        self.assertFalse(lock)
+      with open(self.tmpdir/"output.txt", "w") as f: pass
+      time.sleep(1)
+      with JobLock(self.tmpdir/"lock1.lock", timeout=datetime.timedelta(seconds=1), outputfiles=[self.tmpdir/"output.txt"]) as lock:
+        self.assertTrue(lock)
+      self.assertFalse((self.tmpdir/"output.txt").exists())
 
   def testCorruptFileTimeout(self):
     with open(self.tmpdir/"lock1.lock_2", "w"): pass
@@ -688,11 +702,12 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     with open(self.tmpdir/"squeueoutput", "w") as f:
       f.write(squeueoutput)
 
-    argv = ["--squeue-output-file", os.fspath(self.tmpdir/"squeueoutput"), "--corrupt-job-lock-timeout", "0:0:1.3", "positional", "--minimum-time-for-iterative-locks", "1:1:1.5", "--keyword", "5"]
+    argv = ["--squeue-output-file", os.fspath(self.tmpdir/"squeueoutput"), "--corrupt-job-lock-timeout", "0:0:1.3", "positional", "--minimum-time-for-iterative-locks", "1:1:1.5", "--keyword", "5", "--job-lock-timeout", "3:2:1"]
     args = p.parse_args(argv)
     process_job_lock_arguments(args)
 
     self.assertEqual(args.__dict__, {"positional": "positional", "keyword": 5, "another": None})
+    self.assertEqual(JobLock.defaulttimeout, datetime.timedelta(seconds=10921))
     self.assertEqual(JobLock.defaultcorruptfiletimeout, datetime.timedelta(seconds=1.3))
     self.assertEqual(JobLock.defaultminimumtimeforiterativelocks, datetime.timedelta(seconds=3661.5))
     self.assertTrue(jobfinished("SLURM", 0, 1234566))

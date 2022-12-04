@@ -227,10 +227,11 @@ def jobinfo():
   return sys.platform, cpuid(), os.getpid()
 
 class JobLock(object):
+  defaulttimeout = datetime.timedelta(days=7)
   defaultcorruptfiletimeout = datetime.timedelta(hours=1)
   defaultminimumtimeforiterativelocks = datetime.timedelta(seconds=10)
 
-  def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, prevsteplockfiles=[], corruptfiletimeout=None, minimumtimeforiterativelocks=None, mkdir=False, dosqueue=True, cachesqueue=True, suppressfileopenfailure=False):
+  def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, prevsteplockfiles=[], timeout=None, corruptfiletimeout=None, minimumtimeforiterativelocks=None, mkdir=False, dosqueue=True, cachesqueue=True, suppressfileopenfailure=False):
     self.filename = pathlib.Path(filename)
     self.outputfiles = [pathlib.Path(_) for _ in outputfiles]
     self.inputfiles = [pathlib.Path(_) for _ in inputfiles]
@@ -239,12 +240,19 @@ class JobLock(object):
     self.checkinputfiles = inputfiles and checkinputfiles
     self.checkprevsteplockfiles = prevsteplockfiles
     self.removed_failed_job = False
+
+    if timeout is None:
+      timeout = self.defaulttimeout
+    self.timeout = timeout
+
     if corruptfiletimeout is None:
       corruptfiletimeout = self.defaultcorruptfiletimeout
     self.corruptfiletimeout = corruptfiletimeout
+
     if minimumtimeforiterativelocks is None:
       minimumtimeforiterativelocks = self.defaultminimumtimeforiterativelocks
     self.minimumtimeforiterativelocks = minimumtimeforiterativelocks
+
     self.mkdir = mkdir
     self.dosqueue = dosqueue
     self.cachesqueue = cachesqueue
@@ -255,6 +263,7 @@ class JobLock(object):
       "mkdir": mkdir,
       "dosqueue": dosqueue,
       "cachesqueue": cachesqueue,
+      "timeout": timeout,
       "corruptfiletimeout": corruptfiletimeout,
       "minimumtimeforiterativelocks": minimumtimeforiterativelocks,
       "suppressfileopenfailure": True,
@@ -394,7 +403,7 @@ class JobLock(object):
               return self
           except ValueError as e:
             self.__oldjobinfo = e
-            if self.corruptfiletimeout is not None and age >= self.corruptfiletimeout:
+            if self.corruptfiletimeout is not None and age >= self.corruptfiletimeout or self.timeout is not None and age >= self.timeout:
               for outputfile in self.outputfiles:
                 rm_missing_ok(outputfile)
               rm_missing_ok(self.filename)
@@ -408,7 +417,7 @@ class JobLock(object):
                 logger.warning(f"{self.filename} is likely corrupt (age {age}), consider setting a corrupt file timeout to remove it")
               return self
           else:
-            if jobfinished(*self.oldjobinfo, dojoblist=self.dosqueue, cachejoblist=self.cachesqueue):
+            if self.timeout is not None and age >= self.timeout or jobfinished(*self.oldjobinfo, dojoblist=self.dosqueue, cachejoblist=self.cachesqueue):
               for outputfile in self.outputfiles:
                 rm_missing_ok(outputfile)
               rm_missing_ok(self.filename)
@@ -470,6 +479,9 @@ class JobLock(object):
   @classmethod
   def setdefaultcorruptfiletimeout(cls, timeout):
     cls.defaultcorruptfiletimeout = timeout
+  @classmethod
+  def setdefaulttimeout(cls, timeout):
+    cls.defaulttimeout = timeout
   @classmethod
   def setdefaultminimumtimeforiterativelocks(cls, timeout):
     cls.defaultminimumtimeforiterativelocks = timeout
@@ -628,6 +640,7 @@ def add_job_lock_arguments(argumentparser):
     if match is None:
       raise ValueError(f"{s} does not match {regex}")
     return datetime.timedelta(hours=int(match.group("hours")), minutes=int(match.group("minutes")), seconds=float(match.group("seconds")))
+  p.add_argument("--job-lock-timeout", type=parsetimedelta, help="delete joblock files after this long (%%H:%%M:%%S, default {JobLock.defaulttimeout})")
   p.add_argument("--corrupt-job-lock-timeout", type=parsetimedelta, help=f"delete corrupt joblock files after this long (%%H:%%M:%%S, default {JobLock.defaultcorruptfiletimeout})")
   p.add_argument("--minimum-time-for-iterative-locks", type=parsetimedelta, help=f"if the lock has existed for at least this long, check if the job is still running and, if not, delete the lock (%%H:%%M:%%S, default {JobLock.defaultminimumtimeforiterativelocks})")
 
@@ -640,3 +653,5 @@ def process_job_lock_arguments(parsed_args):
   JobLock.setdefaultcorruptfiletimeout(timeout)
   timeout = dct.pop("minimum_time_for_iterative_locks")
   JobLock.setdefaultminimumtimeforiterativelocks(timeout)
+  timeout = dct.pop("job_lock_timeout")
+  JobLock.setdefaulttimeout(timeout)
