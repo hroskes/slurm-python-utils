@@ -362,7 +362,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
         self.assertFalse(lock)
       with JobLock(self.tmpdir/"lock1.lock", timeout=datetime.timedelta(seconds=1), outputfiles=[self.tmpdir/"output.txt"]) as lock:
         self.assertFalse(lock)
-      with open(self.tmpdir/"output.txt", "w") as f: pass
+      with open(self.tmpdir/"output.txt", "w"): pass
       time.sleep(1)
       with JobLock(self.tmpdir/"lock1.lock", timeout=datetime.timedelta(seconds=1), outputfiles=[self.tmpdir/"output.txt"]) as lock:
         self.assertTrue(lock)
