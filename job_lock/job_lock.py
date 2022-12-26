@@ -379,16 +379,20 @@ class JobLock(object):
     try:
       self.__open()
     except FileExistsError:
+      try:
+        modified = datetime.datetime.fromtimestamp(self.filename.stat().st_mtime)
+      except FileNotFoundError:
+        age = None
+      else:
+        now = datetime.datetime.now()
+        age = now - modified
+      if age is not None and self.minimumtimeforiterativelocks is not None and age < self.minimumtimeforiterativelocks:
+        return self
       #check if the job died without removing the lock
       #however this needs another job lock, because it has
       #a race condition: two jobs could be looking if the previous
       #job failed at the same time, and one of them could remove
       #the lock created by the other one
-      modified = datetime.datetime.fromtimestamp(self.filename.stat().st_mtime)
-      now = datetime.datetime.now()
-      age = now - modified
-      if self.minimumtimeforiterativelocks is not None and age < self.minimumtimeforiterativelocks:
-        return self
       try:
         with JobLock(self.iterative_lock_filename, **self.sublockkwargs) as iterative_lock:
           self.__iterative_lock = iterative_lock
@@ -403,7 +407,7 @@ class JobLock(object):
               return self
           except ValueError as e:
             self.__oldjobinfo = e
-            if self.corruptfiletimeout is not None and age >= self.corruptfiletimeout or self.timeout is not None and age >= self.timeout:
+            if age is not None and (self.corruptfiletimeout is not None and age >= self.corruptfiletimeout or self.timeout is not None and age >= self.timeout):
               for outputfile in self.outputfiles:
                 rm_missing_ok(outputfile)
               rm_missing_ok(self.filename)
@@ -413,11 +417,11 @@ class JobLock(object):
               except FileExistsError:
                 return self
             else:
-              if age >= datetime.timedelta(seconds=1):
+              if age is not None and age >= datetime.timedelta(seconds=1):
                 logger.warning(f"{self.filename} is likely corrupt (age {age}), consider setting a corrupt file timeout to remove it")
               return self
           else:
-            if self.timeout is not None and age >= self.timeout or jobfinished(*self.oldjobinfo, dojoblist=self.dosqueue, cachejoblist=self.cachesqueue):
+            if age is not None and self.timeout is not None and age >= self.timeout or jobfinished(*self.oldjobinfo, dojoblist=self.dosqueue, cachejoblist=self.cachesqueue):
               for outputfile in self.outputfiles:
                 rm_missing_ok(outputfile)
               rm_missing_ok(self.filename)
