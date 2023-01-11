@@ -644,7 +644,7 @@ def add_job_lock_arguments(argumentparser):
     if match is None:
       raise ValueError(f"{s} does not match {regex}")
     return datetime.timedelta(hours=int(match.group("hours")), minutes=int(match.group("minutes")), seconds=float(match.group("seconds")))
-  p.add_argument("--job-lock-timeout", type=parsetimedelta, help="delete joblock files after this long (%%H:%%M:%%S, default {JobLock.defaulttimeout})")
+  p.add_argument("--job-lock-timeout", type=parsetimedelta, help=f"delete joblock files after this long (%%H:%%M:%%S, default {JobLock.defaulttimeout})")
   p.add_argument("--corrupt-job-lock-timeout", type=parsetimedelta, help=f"delete corrupt joblock files after this long (%%H:%%M:%%S, default {JobLock.defaultcorruptfiletimeout})")
   p.add_argument("--minimum-time-for-iterative-locks", type=parsetimedelta, help=f"if the lock has existed for at least this long, check if the job is still running and, if not, delete the lock (%%H:%%M:%%S, default {JobLock.defaultminimumtimeforiterativelocks})")
 
