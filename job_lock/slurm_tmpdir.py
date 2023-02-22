@@ -1,5 +1,5 @@
 from .job_lock import JobLockAndWait, Slurm
-import contextlib, os, pathlib, shutil, subprocess
+import contextlib, math, os, pathlib, shutil, subprocess
 
 def _rsync(source, dest, *, silent, copylinks, vvv=False):
   args = ["-az", "--partial"]
@@ -30,8 +30,13 @@ def slurm_rsync_input(filename, *, tempfilename=None, copylinks=True, silentjobl
     if lockfilename == tempfilename:
       lockfilename = tempfilename.with_suffix(".lock_2")
     assert lockfilename != tempfilename
+
+    filesize = filename.stat().st_size
+    expected_time_upper_limit = 1.1 * filesize / JobLockAndWait.copyspeedlowerlimitbytespersecond
+    maxiterations = 1000
+    secondsperiteration = int(math.ceil(expected_time_upper_limit / maxiterations))
     try:
-      with JobLockAndWait(lockfilename, 10, task=f"rsyncing {filename}", silent=silentjoblock):
+      with JobLockAndWait(lockfilename, secondsperiteration, task=f"rsyncing {filename}", silent=silentjoblock, maxiterations=maxiterations):
         _rsync(filename, tempfilename, silent=silentrsync, copylinks=copylinks, vvv=vvv)
     except subprocess.CalledProcessError:
       return filename
