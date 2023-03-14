@@ -528,8 +528,7 @@ class JobLockAndWait(JobLock):
     super().__init__(name, **kwargs)
     self.delay = delay
     if printmessage is None:
-      printmessage = "Another process is already {task}.  Waiting {delay} seconds."
-    printmessage = printmessage.format(delay=delay, task=task)
+      printmessage = f"Another process is already {task}.  Waiting {delay} seconds."
     self.__printmessage = printmessage
     if silent is None:
       silent = self.defaultsilent
