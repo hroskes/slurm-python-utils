@@ -1,4 +1,4 @@
-import abc, argparse, contextlib, datetime, itertools, logging, os, pathlib, random, re, subprocess, sys, time, uuid
+import abc, argparse, contextlib, datetime, itertools, logging, os, pathlib, random, re, socket, subprocess, sys, time, uuid
 if sys.platform != "cygwin":
   import psutil
 
@@ -282,11 +282,12 @@ class JobLock(object):
     with self:
       return bool(self)
 
-  def runningjobinfo(self, exceptions=False):
+  def runningjobinfo(self, *, exceptions=False):
     try:
       with open(self.filename) as f:
         contents = f.read()
-        jobtype, cpuid, jobid = contents.split()
+        firstline = contents.split("\n")[0]
+        jobtype, cpuid, jobid = firstline.split()
         cpuid = int(cpuid)
         jobid = int(jobid)
         return jobtype, cpuid, jobid
@@ -444,6 +445,7 @@ class JobLock(object):
     self.f = os.fdopen(self.fd, 'w')
 
     message = " ".join(str(_) for _ in jobinfo())
+    message += "\n" + socket.gethostname()
     try:
       self.f.write(message+"\n")
     except (IOError, OSError):
