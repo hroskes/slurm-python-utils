@@ -380,10 +380,10 @@ class JobLock(object):
       self.filename.parent.mkdir(parents=True, exist_ok=True)
     try:
       self.__open()
-    except FileExistsError:
+    except (FileExistsError, PermissionError):
       try:
         modified = datetime.datetime.fromtimestamp(self.filename.stat().st_mtime)
-      except FileNotFoundError:
+      except (FileNotFoundError, PermissionError):
         age = None
       else:
         now = datetime.datetime.now()
@@ -405,7 +405,7 @@ class JobLock(object):
             self.__oldjobinfo = e
             try:
               self.__open()
-            except FileExistsError:
+            except (FileExistsError, PermissionError):
               return self
           except ValueError as e:
             self.__oldjobinfo = e
@@ -416,7 +416,7 @@ class JobLock(object):
               self.removed_failed_job = True
               try:
                 self.__open()
-              except FileExistsError:
+              except (FileExistsError, PermissionError):
                 return self
             else:
               if age is not None and age >= datetime.timedelta(seconds=1):
@@ -430,7 +430,7 @@ class JobLock(object):
               self.removed_failed_job = True
               try:
                 self.__open()
-              except FileExistsError:
+              except (FileExistsError, PermissionError):
                 return self
             else:
               return self
