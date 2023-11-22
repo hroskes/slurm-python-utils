@@ -230,7 +230,7 @@ class JobLock(object):
   defaulttimeout = datetime.timedelta(days=7)
   defaultcorruptfiletimeout = datetime.timedelta(hours=1)
   defaultminimumtimeforiterativelocks = datetime.timedelta(seconds=10)
-  copyspeedlowerlimitbytespersecond = 20e6  #20 MBps
+  copyspeedlowerlimitbytespersecond = 1e6  #1 MBps
 
   def __init__(self, filename, *, outputfiles=[], checkoutputfiles=True, inputfiles=[], checkinputfiles=True, prevsteplockfiles=[], timeout=None, corruptfiletimeout=None, minimumtimeforiterativelocks=None, mkdir=False, dosqueue=True, cachesqueue=True, suppressfileopenfailure=False):
     self.filename = pathlib.Path(filename)
