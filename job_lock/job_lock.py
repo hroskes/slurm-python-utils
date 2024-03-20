@@ -323,18 +323,24 @@ class JobLock(object):
     self.fd = os.open(self.filename, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
 
   @property
-  def iterative_lock_filename(self):
+  def lock_iteration_number(self):
     match = re.match("[.]lock(?:_([0-9]+))?$", self.filename.suffix)
     if match:
       n = match.group(1)
       if n is None: n = 1
-      n = int(n)
-      if n > 1:
-        #sleep by a random amount less than 1/100 of a second to lower the probability of two jobs competing indefinitely
-        time.sleep(random.random()/100)
-      return self.filename.with_suffix(f".lock_{n+1}")
+      return int(n)
     else:
+      return 0
+
+  @property
+  def iterative_lock_filename(self):
+    n = self.lock_iteration_number
+    if n == 0:
       return self.filename.with_suffix(self.filename.suffix+".lock")
+    else:
+      #sleep by a random amount less than 1/100 of a second to lower the probability of two jobs competing indefinitely
+      time.sleep(random.random()/100)
+      return self.filename.with_suffix(f".lock_{n+1}")
 
   def clean_up_iterative_locks(self):
     iterative_lock_filename = self.iterative_lock_filename
@@ -380,7 +386,19 @@ class JobLock(object):
       self.filename.parent.mkdir(parents=True, exist_ok=True)
     try:
       self.__open()
-    except (FileExistsError, PermissionError):
+    except (FileExistsError, PermissionError) as e:
+      #PermissionError can happen because we actually don't have permissions
+      #or because of network connectivity issues.
+      #If the former, we want to raise the error.
+      #If the latter, we want to wait a bit and retry.
+      #There's not really a way to distinguish, other than that network connectivity
+      #issues should only be intermittent.
+      if isinstance(e, PermissionError):
+        if self.lock_iteration_number > 5:
+          raise
+        else:
+          logger.warning(f"PermissionError when creating {self.filename}, waiting 1 second and retrying... ({self.lock_iteration_number}/5)")
+          time.sleep(1)
       try:
         modified = datetime.datetime.fromtimestamp(self.filename.stat().st_mtime)
       except (FileNotFoundError, PermissionError):

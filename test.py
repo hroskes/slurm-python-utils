@@ -120,7 +120,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     """.lstrip()
     with open(self.tmpdir/"squeue", "w") as f:
       f.write(dummysqueue)
-    (self.tmpdir/"squeue").chmod(0o0777)
+    (self.tmpdir/"squeue").chmod(0o777)
 
     with open(fn1, "w") as f:
       f.write("SLURM 0 1234567")
@@ -168,7 +168,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     """.lstrip()
     with open(self.tmpdir/"squeue", "w") as f:
       f.write(dummysqueue)
-    (self.tmpdir/"squeue").chmod(0o0777)
+    (self.tmpdir/"squeue").chmod(0o777)
 
     with open(fn1, "w") as f:
       f.write("SLURM 0 1234567")
@@ -220,7 +220,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     """.lstrip()
     with open(self.tmpdir/"squeue", "w") as f:
       f.write(dummysqueue)
-    (self.tmpdir/"squeue").chmod(0o0777)
+    (self.tmpdir/"squeue").chmod(0o777)
 
     with open(self.tmpdir/"lock1.lock", "w") as f:
       f.write("SLURM 0 1234567")
@@ -248,7 +248,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     """.lstrip()
     with open(self.tmpdir/"condor_q", "w") as f:
       f.write(dummycondor_q)
-    (self.tmpdir/"condor_q").chmod(0o0777)
+    (self.tmpdir/"condor_q").chmod(0o777)
 
     with open(self.tmpdir/"lock1.lock", "w") as f:
       f.write("SLURM 1234567 1")
@@ -287,7 +287,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     """.lstrip()
     with open(self.tmpdir/"squeue", "w") as f:
       f.write(dummysqueue)
-    (self.tmpdir/"squeue").chmod(0o0777)
+    (self.tmpdir/"squeue").chmod(0o777)
 
     with JobLock(self.tmpdir/"lock.lock") as lock:
       self.assertFalse(lock)
@@ -315,7 +315,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     """.lstrip()
     with open(self.tmpdir/"squeue", "w") as f:
       f.write(dummysqueue)
-    (self.tmpdir/"squeue").chmod(0o0777)
+    (self.tmpdir/"squeue").chmod(0o777)
 
     with JobLockAndWait(self.tmpdir/"lock2.lock", 0.001, maxiterations=10, silent=True, cachesqueue=False) as lock2:
       self.assertEqual(lock2.niterations, 2)
@@ -404,7 +404,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     """.lstrip()
     with open(self.tmpdir/"squeue", "w") as f:
       f.write(dummysqueue)
-    (self.tmpdir/"squeue").chmod(0o0777)
+    (self.tmpdir/"squeue").chmod(0o777)
 
     fn1 = self.tmpdir/"lock1.lock"
     fn2 = self.tmpdir/"lock1.lock_2"
@@ -573,7 +573,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     """.lstrip()
     with open(self.tmpdir/"squeue", "w") as f:
       f.write(dummysqueue)
-    (self.tmpdir/"squeue").chmod(0o0777)
+    (self.tmpdir/"squeue").chmod(0o777)
 
     with open(self.tmpdir/"lock1.lock", "w") as f:
       f.write("SLURM 0 1234567")
@@ -617,9 +617,9 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
 
     with open(self.tmpdir/"squeue", "w") as f:
       f.write(dummysqueue)
-    (self.tmpdir/"squeue").chmod(0o0777)
+    (self.tmpdir/"squeue").chmod(0o777)
     with open(self.tmpdir/"condor_q", "w") as f: f.write(goodcondorq)
-    (self.tmpdir/"condor_q").chmod(0o0777)
+    (self.tmpdir/"condor_q").chmod(0o777)
 
     with open(self.tmpdir/"lock1.lock", "w") as f:
       f.write("SLURM 0 1234567")
@@ -718,6 +718,12 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     argv = ["--squeue-output-file", os.fspath(self.tmpdir/"squeueoutput"), "--corrupt-job-lock-timeout", "0:0:1.3.2", "positional", "--keyword", "5"]
     with open(os.devnull, "w") as devnull, contextlib.redirect_stderr(devnull), self.assertRaises(SystemExit):
       p.parse_args(argv)
+
+  def testPermission(self):
+    self.tmpdir.chmod(0o555) #no write permissions
+    with self.assertRaises(PermissionError):
+      with JobLock(self.tmpdir/"lock1.lck") as lock1:
+        pass
 
 def main():
   parser = argparse.ArgumentParser()
