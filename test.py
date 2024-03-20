@@ -29,6 +29,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
     JobLock.setdefaultcorruptfiletimeout(None)
     JobLock.setdefaultminimumtimeforiterativelocks(None)
   def tearDown(self):
+    self.tmpdir.chmod(0o777) #make sure we have write permissions
     del self.tmpdir
     self.close()
     os.environ.clear()
