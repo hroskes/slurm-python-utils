@@ -722,7 +722,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
   def testPermission(self):
     self.tmpdir.chmod(0o555) #no write permissions
     with self.assertRaises(PermissionError):
-      with JobLock(self.tmpdir/"lock1.lck") as lock1:
+      with JobLock(self.tmpdir/"lock1.lock"):
         pass
 
 def main():
