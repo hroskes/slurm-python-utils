@@ -21,13 +21,30 @@ def cpuid():
     return node
 
   #otherwise getnode gave us a random number!
-  for filename in "/etc/machine-id", "/var/lib/dbus/machine-id":
+  for filename in "/etc/machine-id", "/var/lib/dbus/machine-id", "/sys/class/dmi/id/product_uuid":
     try:
       with open(filename) as f:
         machineid = f.read().strip()
     except FileNotFoundError:
       continue
     return uuid.UUID(machineid).int
+
+  if os.name == "nt":
+    try:
+      result = subprocess.run(
+        ["wmic", "csproduct", "get", "uuid"],
+        capture_output=True,
+        text=True,
+        check=True,
+      )
+      lines = result.stdout.strip().split('\n')
+      for line in lines:
+        line = line.strip()
+        if not line: continue
+        if line.lower() == "uuid": continue
+        return uuid.UUID(line).int
+    except (subprocess.CalledProcessError, ValueError):
+      pass
 
   raise ValueError("Couldn't find a cpuid using any of the methods we know about")
 
