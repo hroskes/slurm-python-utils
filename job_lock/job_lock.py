@@ -15,13 +15,33 @@ def cpuid():
     return node
 
   #otherwise getnode gave us a random number!
+  #(machine-id is empty in Docker images, and product_uuid is only readable by root)
   for filename in "/etc/machine-id", "/var/lib/dbus/machine-id", "/sys/class/dmi/id/product_uuid":
     try:
       with open(filename) as f:
         machineid = f.read().strip()
-    except FileNotFoundError:
+    except (OSError, UnicodeDecodeError):
       continue
-    return uuid.UUID(machineid).int
+    try:
+      return uuid.UUID(machineid).int
+    except ValueError:
+      continue
+
+  #uuid.getnode() can't find the MAC address in a Docker container on Ubuntu 26.04
+  #(libuuid doesn't give it and the ip command isn't installed), so read it ourselves
+  try:
+    interfaces = sorted(os.listdir("/sys/class/net"))
+  except OSError:
+    interfaces = []
+  for interface in interfaces:
+    if interface == "lo": continue
+    try:
+      with open(os.path.join("/sys/class/net", interface, "address")) as f:
+        node = int(f.read().strip().replace(":", ""), 16)
+    except (OSError, ValueError):
+      continue
+    if node:
+      return node
 
   if os.name == "nt":
     try:
