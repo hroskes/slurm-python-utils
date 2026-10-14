@@ -20,7 +20,7 @@ def cpuid():
     try:
       with open(filename) as f:
         machineid = f.read().strip()
-    except OSError:
+    except (OSError, UnicodeDecodeError):
       continue
     try:
       return uuid.UUID(machineid).int
