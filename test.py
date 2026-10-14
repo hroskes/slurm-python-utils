@@ -1,4 +1,4 @@
-import argparse, contextlib, datetime, logging, multiprocessing, os, pathlib, subprocess, sys, tempfile, time, unittest
+import argparse, contextlib, datetime, logging, os, pathlib, subprocess, sys, tempfile, threading, time, unittest
 from job_lock import add_job_lock_arguments, clean_up_old_job_locks, clear_running_jobs_cache, jobfinished, JobLock, JobLockAndWait, jobinfo, MultiJobLock, process_job_lock_arguments, setsqueueoutput, slurm_clean_up_temp_dir, slurm_rsync_input, slurm_rsync_output
 from job_lock.job_lock import clean_up_old_job_locks_argparse
 
@@ -9,10 +9,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
 
   def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
-    try:
-      self.enter_context(contextlib.nullcontext())
-    except AttributeError:
-      contextlib.ExitStack.__init__(self)
+    contextlib.ExitStack.__init__(self)
     self.maxDiff = None
   def setUp(self):
     super().setUp()
@@ -346,8 +343,7 @@ class TestJobLock(unittest.TestCase, contextlib.ExitStack):
       def inner():
         time.sleep(delay)
         filename.touch()
-      p = multiprocessing.Process(target=inner)
-      p.start()
+      threading.Thread(target=inner).start()
 
     iterationtime = 0.01
     touchlater(inputfile, iterationtime * 1.5)

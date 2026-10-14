@@ -6,13 +6,7 @@ logger = logging.getLogger("JobLock")
 logger.setLevel(logging.INFO)
 
 def rm_missing_ok(path):
-  if sys.version_info >= (3, 8):
-    return path.unlink(missing_ok=True)
-  else:
-    try:
-      return path.unlink()
-    except FileNotFoundError:
-      pass
+  return path.unlink(missing_ok=True)
 
 def cpuid():
   node = uuid.getnode()
